@@ -30,7 +30,7 @@ const LoginScreen = ({ navigation }) => {
       // البحث في مجموعة users بدلاً من drivers
       const usersRef = firestore().collection('users');
       const snapshot = await usersRef
-        .where('username', '==', username.toLowerCase())
+        .where('name', '==', username)
         .where('role', '==', 'driver')
         .get();
 
@@ -50,8 +50,8 @@ const LoginScreen = ({ navigation }) => {
         return;
       }
 
-      // التحقق من أن الحساب غير محذوف
-      if (userData.deleted === true) {
+      // التحقق من أن الحساب نشط
+      if (userData.isActive !== true) {
         Alert.alert('خطأ', 'هذا الحساب غير نشط');
         setLoading(false);
         return;
