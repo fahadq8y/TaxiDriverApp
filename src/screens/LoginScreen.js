@@ -9,6 +9,8 @@ import {
   ActivityIndicator,
   KeyboardAvoidingView,
   Platform,
+  Image,
+  ScrollView,
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import firestore from '@react-native-firebase/firestore';
@@ -76,39 +78,64 @@ const LoginScreen = ({ navigation }) => {
     <KeyboardAvoidingView
       behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
       style={styles.container}>
-      <View style={styles.content}>
-        <Text style={styles.title}>نظام تتبع السائقين</Text>
-        <Text style={styles.subtitle}>تسجيل الدخول</Text>
+      <ScrollView 
+        contentContainerStyle={styles.scrollContent}
+        keyboardShouldPersistTaps="handled">
+        
+        {/* Header with gradient background */}
+        <View style={styles.header}>
+          <Image
+            source={require('../assets/taxi_illustration.png')}
+            style={styles.taxiImage}
+            resizeMode="contain"
+          />
+          <Text style={styles.title}>نظام تتبع السائقين</Text>
+          <Text style={styles.subtitle}>مرحباً بك</Text>
+        </View>
 
-        <TextInput
-          style={styles.input}
-          placeholder="اسم المستخدم"
-          value={username}
-          onChangeText={setUsername}
-          autoCapitalize="none"
-          textAlign="right"
-        />
+        {/* Login Form */}
+        <View style={styles.formContainer}>
+          <View style={styles.inputContainer}>
+            <Text style={styles.label}>اسم المستخدم</Text>
+            <TextInput
+              style={styles.input}
+              placeholder="أدخل اسم المستخدم"
+              value={username}
+              onChangeText={setUsername}
+              autoCapitalize="none"
+              textAlign="right"
+              placeholderTextColor="#999"
+            />
+          </View>
 
-        <TextInput
-          style={styles.input}
-          placeholder="كلمة المرور"
-          value={password}
-          onChangeText={setPassword}
-          secureTextEntry
-          textAlign="right"
-        />
+          <View style={styles.inputContainer}>
+            <Text style={styles.label}>كلمة المرور</Text>
+            <TextInput
+              style={styles.input}
+              placeholder="أدخل كلمة المرور"
+              value={password}
+              onChangeText={setPassword}
+              secureTextEntry
+              textAlign="right"
+              placeholderTextColor="#999"
+            />
+          </View>
 
-        <TouchableOpacity
-          style={[styles.button, loading && styles.buttonDisabled]}
-          onPress={handleLogin}
-          disabled={loading}>
-          {loading ? (
-            <ActivityIndicator color="#fff" />
-          ) : (
-            <Text style={styles.buttonText}>دخول</Text>
-          )}
-        </TouchableOpacity>
-      </View>
+          <TouchableOpacity
+            style={[styles.button, loading && styles.buttonDisabled]}
+            onPress={handleLogin}
+            disabled={loading}
+            activeOpacity={0.8}>
+            {loading ? (
+              <ActivityIndicator color="#fff" size="small" />
+            ) : (
+              <Text style={styles.buttonText}>تسجيل الدخول</Text>
+            )}
+          </TouchableOpacity>
+        </View>
+
+        <Text style={styles.footer}>جميع الحقوق محفوظة © 2025</Text>
+      </ScrollView>
     </KeyboardAvoidingView>
   );
 };
@@ -116,49 +143,98 @@ const LoginScreen = ({ navigation }) => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#f5f5f5',
+    backgroundColor: '#f8f9fa',
   },
-  content: {
-    flex: 1,
-    justifyContent: 'center',
-    padding: 20,
+  scrollContent: {
+    flexGrow: 1,
+  },
+  header: {
+    backgroundColor: '#FFC107',
+    paddingTop: 60,
+    paddingBottom: 40,
+    paddingHorizontal: 20,
+    borderBottomLeftRadius: 30,
+    borderBottomRightRadius: 30,
+    alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.1,
+    shadowRadius: 8,
+    elevation: 5,
+  },
+  taxiImage: {
+    width: 200,
+    height: 150,
+    marginBottom: 20,
   },
   title: {
     fontSize: 28,
     fontWeight: 'bold',
+    color: '#fff',
+    marginBottom: 8,
     textAlign: 'center',
-    marginBottom: 10,
-    color: '#333',
   },
   subtitle: {
     fontSize: 18,
+    color: '#fff',
+    opacity: 0.9,
     textAlign: 'center',
-    marginBottom: 40,
-    color: '#666',
+  },
+  formContainer: {
+    flex: 1,
+    paddingHorizontal: 30,
+    paddingTop: 40,
+    paddingBottom: 20,
+  },
+  inputContainer: {
+    marginBottom: 20,
+  },
+  label: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#333',
+    marginBottom: 8,
+    textAlign: 'right',
   },
   input: {
     backgroundColor: '#fff',
-    padding: 15,
-    borderRadius: 10,
-    marginBottom: 15,
+    padding: 16,
+    borderRadius: 12,
     fontSize: 16,
     borderWidth: 1,
-    borderColor: '#ddd',
+    borderColor: '#e0e0e0',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.05,
+    shadowRadius: 4,
+    elevation: 2,
   },
   button: {
-    backgroundColor: '#007AFF',
-    padding: 15,
-    borderRadius: 10,
+    backgroundColor: '#FFC107',
+    padding: 18,
+    borderRadius: 12,
     alignItems: 'center',
-    marginTop: 10,
+    marginTop: 20,
+    shadowColor: '#FFC107',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 5,
   },
   buttonDisabled: {
     backgroundColor: '#ccc',
+    shadowOpacity: 0,
   },
   buttonText: {
     color: '#fff',
     fontSize: 18,
     fontWeight: 'bold',
+  },
+  footer: {
+    textAlign: 'center',
+    color: '#999',
+    fontSize: 12,
+    paddingBottom: 20,
   },
 });
 
