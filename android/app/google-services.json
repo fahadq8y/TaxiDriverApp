@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "720874424166",
+    "project_id": "taxi-management-system-d8210",
+    "storage_bucket": "taxi-management-system-d8210.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:720874424166:android:554f5ebf68edc986e5eaa7",
+        "android_client_info": {
+          "package_name": "com.taxidriverapp"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBKkKE3sVo-1yJroTNoJgU4hWeUcUzaJ-A"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
