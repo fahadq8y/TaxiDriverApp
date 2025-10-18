@@ -14,10 +14,12 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import LocationService from '../services/LocationService';
 
 const MainScreen = ({ navigation, route }) => {
+  const [userId, setUserId] = useState(null);
   const [driverId, setDriverId] = useState(null);
   const [driverName, setDriverName] = useState('');
   const [loading, setLoading] = useState(true);
   const [locationServiceStarted, setLocationServiceStarted] = useState(false);
+  const [webViewLoaded, setWebViewLoaded] = useState(false);
   const webViewRef = useRef(null);
 
   useEffect(() => {
@@ -35,10 +37,10 @@ const MainScreen = ({ navigation, route }) => {
   }, []);
 
   useEffect(() => {
-    if (driverId && !locationServiceStarted) {
+    if (userId && !locationServiceStarted) {
       startLocationTracking();
     }
-  }, [driverId]);
+  }, [userId]);
 
   const loadDriverData = async () => {
     try {
@@ -47,10 +49,12 @@ const MainScreen = ({ navigation, route }) => {
       const storedDriverId = await AsyncStorage.getItem('driverId');
       
       if (storedUserId) {
+        setUserId(storedUserId);
         setDriverId(storedDriverId || storedUserId);
         setDriverName(storedDriverName || '');
       } else if (route.params?.driverId) {
         setDriverId(route.params.driverId);
+        setUserId(route.params.driverId);
       } else {
         // No driver data, go back to login
         navigation.replace('Login');
@@ -112,25 +116,55 @@ const MainScreen = ({ navigation, route }) => {
     );
   };
 
+  // JavaScript code to inject into WebView
+  const getInjectedJavaScript = () => {
+    return `
+      (function() {
+        try {
+          // Set user data in localStorage
+          localStorage.setItem('userId', '${userId}');
+          localStorage.setItem('userName', '${driverName}');
+          localStorage.setItem('userRole', 'driver');
+          localStorage.setItem('driverId', '${driverId || userId}');
+          
+          console.log('User data injected successfully');
+          
+          // Reload the page to apply changes
+          if (!window.location.href.includes('reload=1')) {
+            window.location.href = window.location.href + (window.location.href.includes('?') ? '&' : '?') + 'reload=1';
+          }
+        } catch (error) {
+          console.error('Error injecting user data:', error);
+        }
+      })();
+      true;
+    `;
+  };
+
+  const handleWebViewLoad = () => {
+    setWebViewLoaded(true);
+    console.log('WebView loaded successfully');
+  };
+
   if (loading) {
     return (
       <View style={styles.loadingContainer}>
-        <ActivityIndicator size="large" color="#2563eb" />
+        <ActivityIndicator size="large" color="#FFC107" />
         <Text style={styles.loadingText}>جاري التحميل...</Text>
       </View>
     );
   }
 
-  const webViewUrl = `https://taxi-management-system-d8210.web.app/driver-view.html?driverId=${driverId}`;
+  const webViewUrl = `https://taxi-management-system-d8210.web.app/driver-view.html`;
 
   return (
     <>
-      <StatusBar barStyle="dark-content" backgroundColor="#2563eb" />
+      <StatusBar barStyle="light-content" backgroundColor="#FFC107" />
       <View style={styles.container}>
         {/* Header */}
         <View style={styles.header}>
           <View style={styles.headerContent}>
-            <Text style={styles.headerTitle}>🚖 تطبيق السائق</Text>
+            <Text style={styles.headerTitle}>🚖 نظام تتبع السائقين</Text>
             {driverName ? (
               <Text style={styles.headerSubtitle}>مرحباً، {driverName}</Text>
             ) : null}
@@ -150,13 +184,15 @@ const MainScreen = ({ navigation, route }) => {
           startInLoadingState={true}
           renderLoading={() => (
             <View style={styles.webviewLoadingContainer}>
-              <ActivityIndicator size="large" color="#2563eb" />
+              <ActivityIndicator size="large" color="#FFC107" />
               <Text style={styles.loadingText}>جاري تحميل البيانات...</Text>
             </View>
           )}
           javaScriptEnabled={true}
           domStorageEnabled={true}
           cacheEnabled={false}
+          injectedJavaScript={getInjectedJavaScript()}
+          onLoad={handleWebViewLoad}
           onError={(syntheticEvent) => {
             const { nativeEvent } = syntheticEvent;
             console.warn('WebView error: ', nativeEvent);
@@ -167,6 +203,9 @@ const MainScreen = ({ navigation, route }) => {
           }}
           onLoadStart={() => console.log('WebView loading started')}
           onLoadEnd={() => console.log('WebView loading ended')}
+          onMessage={(event) => {
+            console.log('WebView message:', event.nativeEvent.data);
+          }}
         />
 
         {/* Location Service Indicator */}
@@ -187,7 +226,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#f3f4f6',
   },
   header: {
-    backgroundColor: '#2563eb',
+    backgroundColor: '#FFC107',
     paddingVertical: 15,
     paddingHorizontal: 20,
     flexDirection: 'row',
@@ -213,7 +252,8 @@ const styles = StyleSheet.create({
   },
   headerSubtitle: {
     fontSize: 14,
-    color: '#e0e7ff',
+    color: '#fff',
+    opacity: 0.9,
     marginTop: 2,
     textAlign: 'right',
   },
