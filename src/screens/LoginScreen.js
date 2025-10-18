@@ -27,7 +27,7 @@ const LoginScreen = ({ navigation }) => {
     setLoading(true);
 
     try {
-      // البحث في مجموعة users بدلاً من drivers
+      // البحث في مجموعة users عن السائق باستخدام name
       const usersRef = firestore().collection('users');
       const snapshot = await usersRef
         .where('name', '==', username)
@@ -59,8 +59,9 @@ const LoginScreen = ({ navigation }) => {
 
       // حفظ بيانات المستخدم
       await AsyncStorage.setItem('userId', userDoc.id);
-      await AsyncStorage.setItem('userName', userData.name || username);
+      await AsyncStorage.setItem('userName', userData.name);
       await AsyncStorage.setItem('userRole', 'driver');
+      await AsyncStorage.setItem('driverId', userData.driverId || '');
 
       setLoading(false);
       navigation.replace('Main');
@@ -162,3 +163,4 @@ const styles = StyleSheet.create({
 });
 
 export default LoginScreen;
+
