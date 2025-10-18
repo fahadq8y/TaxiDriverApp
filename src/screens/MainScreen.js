@@ -121,20 +121,17 @@ const MainScreen = ({ navigation, route }) => {
     return `
       (function() {
         try {
-          // Set user data in localStorage
-          localStorage.setItem('userId', '${userId}');
-          localStorage.setItem('userName', '${driverName}');
-          localStorage.setItem('userRole', 'driver');
-          localStorage.setItem('driverId', '${driverId || userId}');
+          // Set driver data in sessionStorage (driver-view.html uses sessionStorage)
+          sessionStorage.setItem('driverId', '${userId}');
           
-          console.log('User data injected successfully');
+          console.log('Driver data injected successfully - driverId: ${userId}');
           
           // Reload the page to apply changes
           if (!window.location.href.includes('reload=1')) {
             window.location.href = window.location.href + (window.location.href.includes('?') ? '&' : '?') + 'reload=1';
           }
         } catch (error) {
-          console.error('Error injecting user data:', error);
+          console.error('Error injecting driver data:', error);
         }
       })();
       true;
@@ -155,7 +152,7 @@ const MainScreen = ({ navigation, route }) => {
     );
   }
 
-  const webViewUrl = `https://taxi-management-system-d8210.web.app/driver-dashboard.html`;
+  const webViewUrl = `https://taxi-management-system-d8210.web.app/driver-view.html`;
 
   return (
     <>
