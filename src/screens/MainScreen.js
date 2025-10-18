@@ -42,11 +42,12 @@ const MainScreen = ({ navigation, route }) => {
 
   const loadDriverData = async () => {
     try {
+      const storedUserId = await AsyncStorage.getItem('userId');
+      const storedDriverName = await AsyncStorage.getItem('userName');
       const storedDriverId = await AsyncStorage.getItem('driverId');
-      const storedDriverName = await AsyncStorage.getItem('driverName');
       
-      if (storedDriverId) {
-        setDriverId(storedDriverId);
+      if (storedUserId) {
+        setDriverId(storedDriverId || storedUserId);
         setDriverName(storedDriverName || '');
       } else if (route.params?.driverId) {
         setDriverId(route.params.driverId);
@@ -120,7 +121,7 @@ const MainScreen = ({ navigation, route }) => {
     );
   }
 
-  const webViewUrl = `https://test-taxi-knpc.vercel.app/driver-view.html?driverId=${driverId}`;
+  const webViewUrl = `https://taxi-management-system-d8210.web.app/driver-view.html?driverId=${driverId}`;
 
   return (
     <>

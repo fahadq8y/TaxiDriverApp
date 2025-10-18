@@ -52,9 +52,12 @@ class LocationService {
   // تحديث الموقع في Firebase
   static async updateLocationInFirebase(latitude, longitude, speed, heading) {
     try {
+      const userId = await AsyncStorage.getItem('userId');
       const driverId = await AsyncStorage.getItem('driverId');
-      if (!driverId) {
-        console.log('No driver ID found');
+      const userDocId = userId || driverId;
+      
+      if (!userDocId) {
+        console.log('No user ID found');
         return;
       }
 
@@ -67,19 +70,21 @@ class LocationService {
         lastUpdate: new Date().toISOString(),
       };
 
-      // تحديث الموقع في مستند السائق
+      // تحديث الموقع في مستند السائق في users collection
       await firestore()
-        .collection('drivers')
-        .doc(driverId)
+        .collection('users')
+        .doc(userDocId)
         .update({
           location: locationData,
+          lastSeen: firestore.FieldValue.serverTimestamp(),
         });
 
       // حفظ في سجل المواقع
       await firestore()
         .collection('locationHistory')
         .add({
-          driverId,
+          userId: userDocId,
+          driverId: driverId || userDocId,
           ...locationData,
         });
 
