@@ -155,7 +155,7 @@ const MainScreen = ({ navigation, route }) => {
     );
   }
 
-  const webViewUrl = `https://taxi-management-system-d8210.web.app/driver-view.html`;
+  const webViewUrl = `https://taxi-management-system-d8210.web.app/driver-dashboard.html`;
 
   return (
     <>
