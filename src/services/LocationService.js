@@ -101,12 +101,15 @@ class LocationService {
       const userDocId = userId || driverId;
       
       if (!userDocId) {
-        console.log('No user ID found');
+        console.log('❌ No user ID found');
         return;
       }
 
+      console.log('📍 Updating location for user:', userDocId);
+
       // جلب بيانات السائق للحصول على driverId الصحيح
-      let driverNumber = null;
+      let driverNumber = driverId; // استخدام driverId من AsyncStorage كـ fallback
+      
       try {
         const userDoc = await firestore()
           .collection('users')
@@ -115,10 +118,18 @@ class LocationService {
         
         if (userDoc.exists) {
           const userData = userDoc.data();
-          driverNumber = userData.driverId; // حقل driverId مثل "DRV001"
+          if (userData.driverId) {
+            driverNumber = userData.driverId; // حقل driverId مثل "DRV001"
+            console.log('✅ Found driverId from Firestore:', driverNumber);
+          } else {
+            console.log('⚠️ No driverId field in user document, using fallback:', driverNumber);
+          }
+        } else {
+          console.log('⚠️ User document not found, using fallback driverId:', driverNumber);
         }
       } catch (error) {
-        console.error('Error fetching driver data:', error);
+        console.error('❌ Error fetching driver data:', error);
+        console.log('⚠️ Using fallback driverId:', driverNumber);
       }
 
       const locationData = {
@@ -144,6 +155,7 @@ class LocationService {
 
       // تحديث في driverLocations (للتتبع المباشر)
       if (driverNumber) {
+        console.log('📤 Updating driverLocations for:', driverNumber);
         await firestore()
           .collection('driverLocations')
           .doc(driverNumber)
@@ -157,6 +169,9 @@ class LocationService {
             timestamp: new Date(),
             localTime: new Date().toISOString(),
           });
+        console.log('✅ driverLocations updated successfully');
+      } else {
+        console.log('❌ Cannot update driverLocations: driverNumber is null');
       }
 
       // حفظ في سجل المواقع
@@ -294,9 +309,9 @@ class LocationService {
     console.log('✅ Notification permission granted');
 
     const options = {
-      taskName: 'تتبع الموقع',
-      taskTitle: 'تتبع موقع السائق',
-      taskDesc: 'جاري تتبع موقعك بشكل مستمر',
+      taskName: 'تطبيق التاكسي',
+      taskTitle: 'البرنامج نشط',
+      taskDesc: 'التطبيق يعمل في الخلفية',
       taskIcon: {
         name: 'ic_launcher',
         type: 'mipmap',
@@ -305,11 +320,6 @@ class LocationService {
       linkingURI: 'taxidriver://tracking',
       parameters: {
         delay: 5000,
-      },
-      progressBar: {
-        max: 100,
-        value: 0,
-        indeterminate: true,
       },
     };
 
