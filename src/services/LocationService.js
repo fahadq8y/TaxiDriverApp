@@ -1,3 +1,4 @@
+
 import BackgroundActions from 'react-native-background-actions';
 import Geolocation from 'react-native-geolocation-service';
 import firestore from '@react-native-firebase/firestore';
@@ -97,45 +98,14 @@ class LocationService {
   static async updateLocationInFirebase(latitude, longitude, speed, heading) {
     try {
       const userId = await AsyncStorage.getItem('userId');
-      const driverId = await AsyncStorage.getItem('driverId');
-      const userDocId = userId || driverId;
+      const driverNumber = await AsyncStorage.getItem('driverId'); // <-- DRV001
       
-      if (!userDocId) {
-        console.log('❌ No user ID found');
+      if (!driverNumber) {
+        console.log('❌ FATAL: driverId not found in AsyncStorage. Cannot update location.');
         return;
       }
 
-      console.log('📍 Updating location for user:', userDocId);
-
-      // جلب بيانات السائق للحصول على driverId الصحيح
-      let driverNumber = driverId; // استخدام driverId من AsyncStorage كـ fallback
-      
-      try {
-        console.log('🔍 Searching for driver in drivers collection with ID:', userDocId);
-        
-        // البحث في مجموعة drivers بدلاً من users
-        const driverDoc = await firestore()
-          .collection('drivers')
-          .doc(userDocId)
-          .get();
-        
-        if (driverDoc.exists) {
-          const driverData = driverDoc.data();
-          console.log('✅ Driver document found:', driverData.name);
-          
-          if (driverData.employeeNumber) {
-            driverNumber = driverData.employeeNumber; // حقل employeeNumber مثل "DRV001"
-            console.log('✅ Found employeeNumber:', driverNumber);
-          } else {
-            console.log('⚠️ No employeeNumber field, using fallback:', driverNumber);
-          }
-        } else {
-          console.log('⚠️ Driver document not found in drivers collection, using fallback:', driverNumber);
-        }
-      } catch (error) {
-        console.error('❌ Error fetching driver data:', error);
-        console.log('⚠️ Using fallback driverId:', driverNumber);
-      }
+      console.log(`📍 Updating location for driver: ${driverNumber}`);
 
       const locationData = {
         latitude,
@@ -148,50 +118,48 @@ class LocationService {
         updateCount: ++LocationService.updateCount,
       };
 
-      // تحديث الموقع في مستند السائق في users collection
-      await firestore()
-        .collection('users')
-        .doc(userDocId)
-        .update({
-          location: locationData,
-          lastSeen: firestore.FieldValue.serverTimestamp(),
-          isActive: true,
-        });
-
-      // تحديث في driverLocations (للتتبع المباشر)
-      if (driverNumber) {
-        console.log('📤 Updating driverLocations for:', driverNumber);
+      // تحديث الموقع في مستند السائق في users collection (إذا كان userId موجود)
+      if (userId) {
         await firestore()
-          .collection('driverLocations')
-          .doc(driverNumber)
-          .set({
-            driverId: driverNumber,
-            latitude,
-            longitude,
-            speed: speed || 0,
-            heading: heading || 0,
-            accuracy: 0,
-            timestamp: new Date(),
-            localTime: new Date().toISOString(),
+          .collection('users')
+          .doc(userId)
+          .update({
+            location: locationData,
+            lastSeen: firestore.FieldValue.serverTimestamp(),
+            isActive: true,
           });
-        console.log('✅ driverLocations updated successfully');
-      } else {
-        console.log('❌ Cannot update driverLocations: driverNumber is null');
       }
+
+      // تحديث في driverLocations (للتتبع المباشر) - هذا هو الجزء الأهم!
+      console.log(`📤 Updating driverLocations for: ${driverNumber}`);
+      await firestore()
+        .collection('driverLocations')
+        .doc(driverNumber) // <-- الاستخدام المباشر لـ DRV001
+        .set({
+          driverId: driverNumber,
+          latitude,
+          longitude,
+          speed: speed || 0,
+          heading: heading || 0,
+          accuracy: 0, // يمكنك تحسين هذا لاحقاً
+          timestamp: new Date(),
+          localTime: new Date().toISOString(),
+        });
+      console.log('✅ driverLocations updated successfully');
 
       // حفظ في سجل المواقع
       await firestore()
         .collection('locationHistory')
         .add({
-          userId: userDocId,
-          driverId: driverNumber || userDocId,
+          userId: userId || driverNumber,
+          driverId: driverNumber,
           ...locationData,
         });
 
       LocationService.lastLocation = { latitude, longitude };
       console.log(`Location updated successfully (${LocationService.updateCount})`);
     } catch (error) {
-      console.error('Error updating location:', error);
+      console.error('❌ Error updating location in Firebase:', error);
     }
   }
 
@@ -257,9 +225,9 @@ class LocationService {
         },
         {
           enableHighAccuracy: true,
-          distanceFilter: 10,
-          interval: 5000,
-          fastestInterval: 3000,
+          distanceFilter: 10, // متر
+          interval: 5000, // 5 ثواني
+          fastestInterval: 3000, // 3 ثواني
           showLocationDialog: true,
           forceRequestLocation: true,
           forceLocationManager: false,
@@ -270,7 +238,7 @@ class LocationService {
       LocationService.intervalId = setInterval(async () => {
         console.log('Interval update triggered');
         await LocationService.fetchAndUpdateLocation();
-      }, 10000);
+      }, 10000); // 10 ثواني
 
       // تحديث فوري عند البدء
       await LocationService.fetchAndUpdateLocation();
@@ -344,82 +312,20 @@ class LocationService {
 
   // إيقاف خدمة التتبع
   static async stop() {
-    if (!LocationService.isRunning) {
-      console.log('Location service not running');
-      return;
-    }
-
-    try {
-      // إيقاف watchPosition
+    console.log('Stopping location service...');
+    if (LocationService.isRunning) {
+      await BackgroundActions.stop();
       if (LocationService.watchId !== null) {
         Geolocation.clearWatch(LocationService.watchId);
         LocationService.watchId = null;
       }
-
-      // إيقاف الـ interval
-      if (LocationService.intervalId !== null) {
+      if (LocationService.intervalId) {
         clearInterval(LocationService.intervalId);
         LocationService.intervalId = null;
       }
-
-      // تحديث حالة السائق كغير نشط
-      try {
-        const userId = await AsyncStorage.getItem('userId');
-        if (userId) {
-          await firestore()
-            .collection('users')
-            .doc(userId)
-            .update({
-              isActive: false,
-              lastSeen: firestore.FieldValue.serverTimestamp(),
-            });
-        }
-      } catch (error) {
-        console.error('Error updating driver status:', error);
-      }
-
-      await BackgroundActions.stop();
       LocationService.isRunning = false;
       console.log('Location service stopped');
-    } catch (error) {
-      console.error('Error stopping location service:', error);
     }
-  }
-
-  // الحصول على الموقع الحالي مرة واحدة
-  static async getCurrentLocation() {
-    const hasPermission = await LocationService.requestLocationPermission();
-    
-    if (!hasPermission) {
-      throw new Error('Location permission not granted');
-    }
-
-    return new Promise((resolve, reject) => {
-      Geolocation.getCurrentPosition(
-        (position) => {
-          resolve(position.coords);
-        },
-        (error) => {
-          reject(error);
-        },
-        {
-          enableHighAccuracy: true,
-          timeout: 15000,
-          maximumAge: 10000,
-          forceRequestLocation: true,
-        }
-      );
-    });
-  }
-
-  // التحقق من حالة الخدمة
-  static isServiceRunning() {
-    return LocationService.isRunning;
-  }
-
-  // الحصول على آخر موقع
-  static getLastLocation() {
-    return LocationService.lastLocation;
   }
 }
 
