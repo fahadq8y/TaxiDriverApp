@@ -63,7 +63,7 @@ const LoginScreen = ({ navigation }) => {
       await AsyncStorage.setItem('userId', userDoc.id);
       await AsyncStorage.setItem('userName', userData.name);
       await AsyncStorage.setItem('userRole', 'driver');
-      await AsyncStorage.setItem('driverId', userData.driverId || '');
+      await AsyncStorage.setItem('driverId', userDoc.id);
 
       setLoading(false);
       navigation.replace('Main');
