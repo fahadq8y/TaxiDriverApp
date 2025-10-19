@@ -8,15 +8,10 @@ import {
   StatusBar,
   Text,
   TouchableOpacity,
-  Platform,
-  Linking,
-  NativeModules,
 } from 'react-native';
 import { WebView } from 'react-native-webview';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import LocationService from '../services/LocationService';
-
-const { PowerManagerModule } = NativeModules;
 
 const MainScreen = ({ navigation, route }) => {
   const [userId, setUserId] = useState(null);
@@ -71,45 +66,11 @@ const MainScreen = ({ navigation, route }) => {
     }
   };
 
-  const requestBatteryOptimization = async () => {
-    if (Platform.OS === 'android') {
-      try {
-        const packageName = 'com.taxidriverapp';
-        const intent = `android.settings.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS`;
-        const url = `intent:#Intent;action=${intent};data=package:${packageName};end`;
-        
-        Alert.alert(
-          'تفعيل التتبع المستمر',
-          'للتتبع المستمر حتى عند قفل الشاشة، يجب تعطيل تحسين البطارية للتطبيق',
-          [
-            {
-              text: 'إلغاء',
-              style: 'cancel',
-            },
-            {
-              text: 'فتح الإعدادات',
-              onPress: () => {
-                Linking.openSettings();
-              },
-            },
-          ]
-        );
-      } catch (error) {
-        console.error('Error requesting battery optimization:', error);
-      }
-    }
-  };
-
   const startLocationTracking = async () => {
     try {
       await LocationService.start();
       setLocationServiceStarted(true);
       console.log('Location tracking started');
-      
-      // طلب تعطيل Battery Optimization
-      setTimeout(() => {
-        requestBatteryOptimization();
-      }, 2000);
     } catch (error) {
       console.error('Error starting location tracking:', error);
       Alert.alert(
@@ -160,17 +121,20 @@ const MainScreen = ({ navigation, route }) => {
     return `
       (function() {
         try {
-          // Set driver data in sessionStorage (driver-view.html uses sessionStorage)
-          sessionStorage.setItem('driverId', '${userId}');
+          // Set user data in localStorage
+          localStorage.setItem('userId', '${userId}');
+          localStorage.setItem('userName', '${driverName}');
+          localStorage.setItem('userRole', 'driver');
+          localStorage.setItem('driverId', '${driverId || userId}');
           
-          console.log('Driver data injected successfully - driverId: ${userId}');
+          console.log('User data injected successfully');
           
           // Reload the page to apply changes
           if (!window.location.href.includes('reload=1')) {
             window.location.href = window.location.href + (window.location.href.includes('?') ? '&' : '?') + 'reload=1';
           }
         } catch (error) {
-          console.error('Error injecting driver data:', error);
+          console.error('Error injecting user data:', error);
         }
       })();
       true;
@@ -191,7 +155,7 @@ const MainScreen = ({ navigation, route }) => {
     );
   }
 
-  const webViewUrl = `https://taxi-management-system-d8210.web.app/driver-view.html?driverId=${userId}`;
+  const webViewUrl = `https://taxi-management-system-d8210.web.app/driver-dashboard.html`;
 
   return (
     <>
