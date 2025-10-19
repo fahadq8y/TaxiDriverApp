@@ -61,6 +61,22 @@ class LocationService {
         return;
       }
 
+      // جلب بيانات السائق للحصول على driverId الصحيح
+      let driverNumber = null;
+      try {
+        const userDoc = await firestore()
+          .collection('users')
+          .doc(userDocId)
+          .get();
+        
+        if (userDoc.exists) {
+          const userData = userDoc.data();
+          driverNumber = userData.driverId; // حقل driverId مثل "DRV001"
+        }
+      } catch (error) {
+        console.error('Error fetching driver data:', error);
+      }
+
       const locationData = {
         latitude,
         longitude,
@@ -84,7 +100,7 @@ class LocationService {
         .collection('locationHistory')
         .add({
           userId: userDocId,
-          driverId: driverId || userDocId,
+          driverId: driverNumber || userDocId, // استخدام driverNumber (DRV001) بدلاً من Document ID
           ...locationData,
         });
 
