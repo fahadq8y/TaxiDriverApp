@@ -111,21 +111,26 @@ class LocationService {
       let driverNumber = driverId; // استخدام driverId من AsyncStorage كـ fallback
       
       try {
-        const userDoc = await firestore()
-          .collection('users')
+        console.log('🔍 Searching for driver in drivers collection with ID:', userDocId);
+        
+        // البحث في مجموعة drivers بدلاً من users
+        const driverDoc = await firestore()
+          .collection('drivers')
           .doc(userDocId)
           .get();
         
-        if (userDoc.exists) {
-          const userData = userDoc.data();
-          if (userData.driverId) {
-            driverNumber = userData.driverId; // حقل driverId مثل "DRV001"
-            console.log('✅ Found driverId from Firestore:', driverNumber);
+        if (driverDoc.exists) {
+          const driverData = driverDoc.data();
+          console.log('✅ Driver document found:', driverData.name);
+          
+          if (driverData.employeeNumber) {
+            driverNumber = driverData.employeeNumber; // حقل employeeNumber مثل "DRV001"
+            console.log('✅ Found employeeNumber:', driverNumber);
           } else {
-            console.log('⚠️ No driverId field in user document, using fallback:', driverNumber);
+            console.log('⚠️ No employeeNumber field, using fallback:', driverNumber);
           }
         } else {
-          console.log('⚠️ User document not found, using fallback driverId:', driverNumber);
+          console.log('⚠️ Driver document not found in drivers collection, using fallback:', driverNumber);
         }
       } catch (error) {
         console.error('❌ Error fetching driver data:', error);
