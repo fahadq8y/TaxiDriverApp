@@ -42,8 +42,8 @@ const MainScreen = ({ navigation, route }) => {
   }, []);
 
   useEffect(() => {
-    if (userId && !locationServiceStarted) {
-      startLocationTracking();
+    if (driverId && !locationServiceStarted) {
+      startLocationTracking(driverId);
     }
   }, [userId]);
 
@@ -120,11 +120,11 @@ const MainScreen = ({ navigation, route }) => {
     }
   };
 
-  const startLocationTracking = async () => {
+  const startLocationTracking = async (currentDriverId) => {
     try {
       console.log('🚀 Attempting to start location tracking...');
       
-      await LocationService.start();
+      await LocationService.start(currentDriverId);
       setLocationServiceStarted(true);
       console.log('✅ Location tracking started successfully');
       

@@ -95,10 +95,10 @@ class LocationService {
   }
 
   // تحديث الموقع في Firebase
-  static async updateLocationInFirebase(latitude, longitude, speed, heading) {
+  static async updateLocationInFirebase(driverId, latitude, longitude, speed, heading) {
     try {
       const userId = await AsyncStorage.getItem('userId');
-      const driverNumber = await AsyncStorage.getItem('driverId'); // <-- DRV001
+      const driverNumber = driverId; // <-- DRV001
       
       if (!driverNumber) {
         console.log('❌ FATAL: driverId not found in AsyncStorage. Cannot update location.');
@@ -183,7 +183,7 @@ class LocationService {
       
       console.log('Fetched location:', { latitude, longitude });
       
-      await LocationService.updateLocationInFirebase(
+      await LocationService.updateLocationInFirebase(driverId, 
         latitude,
         longitude,
         speed,
@@ -195,7 +195,7 @@ class LocationService {
   }
 
   // مهمة الخلفية
-  static backgroundTask = async (taskData) => {
+  static backgroundTask = async ({ driverId }) => {
     await new Promise(async (resolve) => {
       const hasPermission = await LocationService.requestLocationPermission();
       
@@ -246,7 +246,7 @@ class LocationService {
   };
 
   // بدء خدمة التتبع
-  static async start() {
+  static async start(driverId) {
     console.log('🔵 LocationService.start() called');
     
     if (LocationService.isRunning) {
@@ -282,6 +282,20 @@ class LocationService {
     console.log('✅ Notification permission granted');
 
     const options = {
+      taskName: 'تطبيق التاكسي',
+      taskTitle: 'البرنامج نشط',
+      taskDesc: 'التطبيق يعمل في الخلفية',
+      taskIcon: {
+        name: 'ic_launcher',
+        type: 'mipmap',
+      },
+      color: '#FFC107',
+      linkingURI: 'taxidriver://tracking',
+      parameters: {
+        delay: 5000,
+        driverId: driverId, // <-- تمرير driverId إلى مهمة الخلفية
+      },
+    };
       taskName: 'تطبيق التاكسي',
       taskTitle: 'البرنامج نشط',
       taskDesc: 'التطبيق يعمل في الخلفية',
