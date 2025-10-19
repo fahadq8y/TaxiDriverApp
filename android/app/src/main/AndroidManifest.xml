@@ -15,6 +15,9 @@
     
     <!-- صلاحيات إضافية للعمل في الخلفية -->
     <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
+    
+    <!-- صلاحية الإشعارات (Android 13+) -->
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
 
     <application
       android:name=".MainApplication"

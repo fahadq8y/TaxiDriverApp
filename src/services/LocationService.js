@@ -52,6 +52,47 @@ class LocationService {
     return true;
   }
 
+  // طلب صلاحية الإشعارات (Android 13+)
+  static async requestNotificationPermission() {
+    if (Platform.OS === 'android' && Platform.Version >= 33) {
+      try {
+        const granted = await PermissionsAndroid.request(
+          PermissionsAndroid.PERMISSIONS.POST_NOTIFICATIONS,
+          {
+            title: 'صلاحية الإشعارات',
+            message: 'التطبيق يحتاج صلاحية الإشعارات لعرض حالة التتبع في شريط الإشعارات',
+            buttonNeutral: 'اسألني لاحقاً',
+            buttonNegative: 'إلغاء',
+            buttonPositive: 'موافق',
+          }
+        );
+        return granted === PermissionsAndroid.RESULTS.GRANTED;
+      } catch (err) {
+        console.warn('Notification permission error:', err);
+        return false;
+      }
+    }
+    // For Android < 13, notifications are granted by default
+    return true;
+  }
+
+  // التحقق من صلاحية الإشعارات
+  static async checkNotificationPermission() {
+    if (Platform.OS === 'android' && Platform.Version >= 33) {
+      try {
+        const granted = await PermissionsAndroid.check(
+          PermissionsAndroid.PERMISSIONS.POST_NOTIFICATIONS
+        );
+        return granted;
+      } catch (err) {
+        console.warn('Error checking notification permission:', err);
+        return false;
+      }
+    }
+    // For Android < 13, assume granted
+    return true;
+  }
+
   // تحديث الموقع في Firebase
   static async updateLocationInFirebase(latitude, longitude, speed, heading) {
     try {
@@ -87,8 +128,8 @@ class LocationService {
         heading: heading || 0,
         timestamp: firestore.FieldValue.serverTimestamp(),
         lastUpdate: new Date().toISOString(),
-        appState: AppState.currentState, // إضافة حالة التطبيق
-        updateCount: ++LocationService.updateCount, // عداد التحديثات
+        appState: AppState.currentState,
+        updateCount: ++LocationService.updateCount,
       };
 
       // تحديث الموقع في مستند السائق في users collection
@@ -98,7 +139,7 @@ class LocationService {
         .update({
           location: locationData,
           lastSeen: firestore.FieldValue.serverTimestamp(),
-          isActive: true, // تعيين السائق كنشط
+          isActive: true,
         });
 
       // تحديث في driverLocations (للتتبع المباشر)
@@ -134,7 +175,7 @@ class LocationService {
     }
   }
 
-  // الحصول على الموقع وتحديثه (يعمل حتى لو watchPosition توقف)
+  // الحصول على الموقع وتحديثه
   static async fetchAndUpdateLocation() {
     try {
       const position = await new Promise((resolve, reject) => {
@@ -165,7 +206,7 @@ class LocationService {
     }
   }
 
-  // مهمة الخلفية المحسّنة
+  // مهمة الخلفية
   static backgroundTask = async (taskData) => {
     await new Promise(async (resolve) => {
       const hasPermission = await LocationService.requestLocationPermission();
@@ -177,7 +218,7 @@ class LocationService {
 
       console.log('Background task started');
 
-      // الطريقة 1: watchPosition للتحديثات التلقائية
+      // watchPosition للتحديثات التلقائية
       LocationService.watchId = Geolocation.watchPosition(
         (position) => {
           const { latitude, longitude, speed, heading } = position.coords;
@@ -196,8 +237,8 @@ class LocationService {
         },
         {
           enableHighAccuracy: true,
-          distanceFilter: 10, // تحديث كل 10 متر
-          interval: 5000, // تحديث كل 5 ثواني
+          distanceFilter: 10,
+          interval: 5000,
           fastestInterval: 3000,
           showLocationDialog: true,
           forceRequestLocation: true,
@@ -205,12 +246,11 @@ class LocationService {
         }
       );
 
-      // الطريقة 2: Interval للتحديثات الدورية (backup)
-      // هذا يضمن التحديث حتى لو watchPosition توقف
+      // Interval للتحديثات الدورية (backup)
       LocationService.intervalId = setInterval(async () => {
         console.log('Interval update triggered');
         await LocationService.fetchAndUpdateLocation();
-      }, 10000); // كل 10 ثواني
+      }, 10000);
 
       // تحديث فوري عند البدء
       await LocationService.fetchAndUpdateLocation();
@@ -226,15 +266,32 @@ class LocationService {
       return;
     }
 
+    // التحقق من صلاحية الموقع
     console.log('🔑 Requesting location permission...');
-    const hasPermission = await LocationService.requestLocationPermission();
+    const hasLocationPermission = await LocationService.requestLocationPermission();
     
-    if (!hasPermission) {
+    if (!hasLocationPermission) {
       console.log('❌ Location permission not granted');
-      throw new Error('Location permission not granted');
+      throw new Error('صلاحية الموقع مرفوضة. الرجاء السماح بالوصول للموقع من إعدادات التطبيق.');
     }
     
     console.log('✅ Location permission granted');
+
+    // التحقق من صلاحية الإشعارات
+    console.log('🔔 Checking notification permission...');
+    let hasNotificationPermission = await LocationService.checkNotificationPermission();
+    
+    if (!hasNotificationPermission) {
+      console.log('⚠️ Notification permission not granted, requesting...');
+      hasNotificationPermission = await LocationService.requestNotificationPermission();
+      
+      if (!hasNotificationPermission) {
+        console.log('❌ Notification permission denied');
+        throw new Error('NOTIFICATION_PERMISSION_DENIED');
+      }
+    }
+    
+    console.log('✅ Notification permission granted');
 
     const options = {
       taskName: 'تتبع الموقع',

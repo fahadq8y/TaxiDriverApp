@@ -71,16 +71,82 @@ const MainScreen = ({ navigation, route }) => {
     }
   };
 
-  const requestBatteryOptimization = async () => {
+  const checkAndRequestBatteryOptimization = async () => {
     if (Platform.OS === 'android') {
       try {
-        const packageName = 'com.taxidriverapp';
-        const intent = `android.settings.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS`;
-        const url = `intent:#Intent;action=${intent};data=package:${packageName};end`;
+        // التحقق من حالة Battery Optimization
+        const isIgnoringBatteryOptimizations = await PowerManagerModule?.isIgnoringBatteryOptimizations();
         
+        // إذا كانت معطّلة بالفعل، لا داعي لإظهار الرسالة
+        if (isIgnoringBatteryOptimizations) {
+          console.log('✅ Battery optimization already disabled');
+          return;
+        }
+
+        // التحقق من AsyncStorage إذا تم إظهار الرسالة سابقاً
+        const batteryOptimizationAsked = await AsyncStorage.getItem('batteryOptimizationAsked');
+        
+        if (batteryOptimizationAsked === 'true') {
+          console.log('Battery optimization message already shown before');
+          return;
+        }
+
+        // إظهار الرسالة مرة واحدة فقط
         Alert.alert(
           'تفعيل التتبع المستمر',
           'للتتبع المستمر حتى عند قفل الشاشة، يجب تعطيل تحسين البطارية للتطبيق',
+          [
+            {
+              text: 'إلغاء',
+              style: 'cancel',
+              onPress: async () => {
+                // حفظ أن المستخدم رأى الرسالة
+                await AsyncStorage.setItem('batteryOptimizationAsked', 'true');
+              },
+            },
+            {
+              text: 'فتح الإعدادات',
+              onPress: async () => {
+                // حفظ أن المستخدم رأى الرسالة
+                await AsyncStorage.setItem('batteryOptimizationAsked', 'true');
+                Linking.openSettings();
+              },
+            },
+          ]
+        );
+      } catch (error) {
+        console.error('Error checking battery optimization:', error);
+      }
+    }
+  };
+
+  const startLocationTracking = async () => {
+    try {
+      console.log('🚀 Attempting to start location tracking...');
+      
+      await LocationService.start();
+      setLocationServiceStarted(true);
+      console.log('✅ Location tracking started successfully');
+      
+      Alert.alert(
+        'نجح التفعيل',
+        'تم تفعيل خدمة التتبع بنجاح! يجب أن تشاهد إشعار في شريط الإشعارات.',
+        [{ text: 'حسناً' }]
+      );
+      
+      // التحقق من Battery Optimization بعد 3 ثواني
+      setTimeout(() => {
+        checkAndRequestBatteryOptimization();
+      }, 3000);
+    } catch (error) {
+      console.error('❌ Error starting location tracking:', error);
+      console.error('Error details:', JSON.stringify(error));
+      
+      // معالجة خاصة لخطأ صلاحية الإشعارات
+      if (error.message === 'NOTIFICATION_PERMISSION_DENIED') {
+        Alert.alert(
+          'صلاحية الإشعارات مطلوبة',
+          'لتفعيل خدمة التتبع، يجب السماح بالإشعارات.\n\nالإشعار ضروري لعمل التتبع في الخلفية.\n\nالرجاء:\n1. فتح إعدادات التطبيق\n2. تفعيل "السماح بالإشعارات"\n3. العودة للتطبيق',
           [
             {
               text: 'إلغاء',
@@ -94,45 +160,25 @@ const MainScreen = ({ navigation, route }) => {
             },
           ]
         );
-      } catch (error) {
-        console.error('Error requesting battery optimization:', error);
+      } else {
+        // رسالة خطأ عامة
+        Alert.alert(
+          'فشل التفعيل',
+          `لم يتم تفعيل خدمة التتبع.\n\n${error.message || 'خطأ غير معروف'}\n\nالرجاء:\n1. السماح بصلاحيات الموقع\n2. تفعيل الإشعارات\n3. تفعيل GPS\n4. إعادة تشغيل التطبيق`,
+          [
+            {
+              text: 'إلغاء',
+              style: 'cancel',
+            },
+            {
+              text: 'فتح الإعدادات',
+              onPress: () => {
+                Linking.openSettings();
+              },
+            },
+          ]
+        );
       }
-    }
-  };
-
-  const startLocationTracking = async () => {
-    try {
-      console.log('🚀 Attempting to start location tracking...');
-      
-      Alert.alert(
-        'تفعيل التتبع',
-        'جاري تفعيل خدمة التتبع...',
-        [{ text: 'حسناً' }]
-      );
-      
-      await LocationService.start();
-      setLocationServiceStarted(true);
-      console.log('✅ Location tracking started successfully');
-      
-      Alert.alert(
-        'نجح التفعيل',
-        'تم تفعيل خدمة التتبع بنجاح! يجب أن تشاهد إشعار في شريط الإشعارات.',
-        [{ text: 'حسناً' }]
-      );
-      
-      // طلب تعطيل Battery Optimization
-      setTimeout(() => {
-        requestBatteryOptimization();
-      }, 3000);
-    } catch (error) {
-      console.error('❌ Error starting location tracking:', error);
-      console.error('Error details:', JSON.stringify(error));
-      
-      Alert.alert(
-        'فشل التفعيل',
-        `لم يتم تفعيل خدمة التتبع.\n\nالخطأ: ${error.message || 'غير معروف'}\n\nالرجاء:\n1. السماح بصلاحيات الموقع\n2. تفعيل GPS\n3. إعادة تشغيل التطبيق`,
-        [{ text: 'حسناً' }]
-      );
     }
   };
 
