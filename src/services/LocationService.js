@@ -2,11 +2,14 @@ import BackgroundActions from 'react-native-background-actions';
 import Geolocation from 'react-native-geolocation-service';
 import firestore from '@react-native-firebase/firestore';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { PermissionsAndroid, Platform } from 'react-native';
+import { PermissionsAndroid, Platform, AppState } from 'react-native';
 
 class LocationService {
   static isRunning = false;
   static watchId = null;
+  static intervalId = null;
+  static lastLocation = null;
+  static updateCount = 0;
 
   // طلب صلاحيات الموقع
   static async requestLocationPermission() {
@@ -84,6 +87,8 @@ class LocationService {
         heading: heading || 0,
         timestamp: firestore.FieldValue.serverTimestamp(),
         lastUpdate: new Date().toISOString(),
+        appState: AppState.currentState, // إضافة حالة التطبيق
+        updateCount: ++LocationService.updateCount, // عداد التحديثات
       };
 
       // تحديث الموقع في مستند السائق في users collection
@@ -93,6 +98,7 @@ class LocationService {
         .update({
           location: locationData,
           lastSeen: firestore.FieldValue.serverTimestamp(),
+          isActive: true, // تعيين السائق كنشط
         });
 
       // حفظ في سجل المواقع
@@ -100,17 +106,49 @@ class LocationService {
         .collection('locationHistory')
         .add({
           userId: userDocId,
-          driverId: driverNumber || userDocId, // استخدام driverNumber (DRV001) بدلاً من Document ID
+          driverId: driverNumber || userDocId,
           ...locationData,
         });
 
-      console.log('Location updated successfully');
+      LocationService.lastLocation = { latitude, longitude };
+      console.log(`Location updated successfully (${LocationService.updateCount})`);
     } catch (error) {
       console.error('Error updating location:', error);
     }
   }
 
-  // مهمة الخلفية
+  // الحصول على الموقع وتحديثه (يعمل حتى لو watchPosition توقف)
+  static async fetchAndUpdateLocation() {
+    try {
+      const position = await new Promise((resolve, reject) => {
+        Geolocation.getCurrentPosition(
+          (pos) => resolve(pos),
+          (error) => reject(error),
+          {
+            enableHighAccuracy: true,
+            timeout: 15000,
+            maximumAge: 0,
+            forceRequestLocation: true,
+          }
+        );
+      });
+
+      const { latitude, longitude, speed, heading } = position.coords;
+      
+      console.log('Fetched location:', { latitude, longitude });
+      
+      await LocationService.updateLocationInFirebase(
+        latitude,
+        longitude,
+        speed,
+        heading
+      );
+    } catch (error) {
+      console.error('Error fetching location:', error);
+    }
+  }
+
+  // مهمة الخلفية المحسّنة
   static backgroundTask = async (taskData) => {
     await new Promise(async (resolve) => {
       const hasPermission = await LocationService.requestLocationPermission();
@@ -120,14 +158,15 @@ class LocationService {
         return;
       }
 
-      // تتبع الموقع بشكل مستمر
+      console.log('Background task started');
+
+      // الطريقة 1: watchPosition للتحديثات التلقائية
       LocationService.watchId = Geolocation.watchPosition(
         (position) => {
           const { latitude, longitude, speed, heading } = position.coords;
           
-          console.log('New location:', { latitude, longitude });
+          console.log('Watch position update:', { latitude, longitude });
           
-          // تحديث الموقع في Firebase
           LocationService.updateLocationInFirebase(
             latitude,
             longitude,
@@ -136,18 +175,28 @@ class LocationService {
           );
         },
         (error) => {
-          console.error('Location error:', error);
+          console.error('Watch position error:', error);
         },
         {
           enableHighAccuracy: true,
           distanceFilter: 10, // تحديث كل 10 متر
           interval: 5000, // تحديث كل 5 ثواني
-          fastestInterval: 3000, // أسرع تحديث كل 3 ثواني
+          fastestInterval: 3000,
           showLocationDialog: true,
           forceRequestLocation: true,
           forceLocationManager: false,
         }
       );
+
+      // الطريقة 2: Interval للتحديثات الدورية (backup)
+      // هذا يضمن التحديث حتى لو watchPosition توقف
+      LocationService.intervalId = setInterval(async () => {
+        console.log('Interval update triggered');
+        await LocationService.fetchAndUpdateLocation();
+      }, 10000); // كل 10 ثواني
+
+      // تحديث فوري عند البدء
+      await LocationService.fetchAndUpdateLocation();
     });
   };
 
@@ -162,7 +211,7 @@ class LocationService {
     
     if (!hasPermission) {
       console.log('Location permission not granted');
-      return;
+      throw new Error('Location permission not granted');
     }
 
     const options = {
@@ -173,19 +222,26 @@ class LocationService {
         name: 'ic_launcher',
         type: 'mipmap',
       },
-      color: '#2563eb',
+      color: '#FFC107',
       linkingURI: 'taxidriver://tracking',
       parameters: {
         delay: 5000,
+      },
+      progressBar: {
+        max: 100,
+        value: 0,
+        indeterminate: true,
       },
     };
 
     try {
       await BackgroundActions.start(LocationService.backgroundTask, options);
       LocationService.isRunning = true;
-      console.log('Location service started');
+      LocationService.updateCount = 0;
+      console.log('Location service started successfully');
     } catch (error) {
       console.error('Error starting location service:', error);
+      throw error;
     }
   }
 
@@ -197,9 +253,32 @@ class LocationService {
     }
 
     try {
+      // إيقاف watchPosition
       if (LocationService.watchId !== null) {
         Geolocation.clearWatch(LocationService.watchId);
         LocationService.watchId = null;
+      }
+
+      // إيقاف الـ interval
+      if (LocationService.intervalId !== null) {
+        clearInterval(LocationService.intervalId);
+        LocationService.intervalId = null;
+      }
+
+      // تحديث حالة السائق كغير نشط
+      try {
+        const userId = await AsyncStorage.getItem('userId');
+        if (userId) {
+          await firestore()
+            .collection('users')
+            .doc(userId)
+            .update({
+              isActive: false,
+              lastSeen: firestore.FieldValue.serverTimestamp(),
+            });
+        }
+      } catch (error) {
+        console.error('Error updating driver status:', error);
       }
 
       await BackgroundActions.stop();
@@ -230,9 +309,20 @@ class LocationService {
           enableHighAccuracy: true,
           timeout: 15000,
           maximumAge: 10000,
+          forceRequestLocation: true,
         }
       );
     });
+  }
+
+  // التحقق من حالة الخدمة
+  static isServiceRunning() {
+    return LocationService.isRunning;
+  }
+
+  // الحصول على آخر موقع
+  static getLastLocation() {
+    return LocationService.lastLocation;
   }
 }
 
