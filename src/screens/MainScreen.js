@@ -102,19 +102,36 @@ const MainScreen = ({ navigation, route }) => {
 
   const startLocationTracking = async () => {
     try {
+      console.log('🚀 Attempting to start location tracking...');
+      
+      Alert.alert(
+        'تفعيل التتبع',
+        'جاري تفعيل خدمة التتبع...',
+        [{ text: 'حسناً' }]
+      );
+      
       await LocationService.start();
       setLocationServiceStarted(true);
-      console.log('Location tracking started');
+      console.log('✅ Location tracking started successfully');
+      
+      Alert.alert(
+        'نجح التفعيل',
+        'تم تفعيل خدمة التتبع بنجاح! يجب أن تشاهد إشعار في شريط الإشعارات.',
+        [{ text: 'حسناً' }]
+      );
       
       // طلب تعطيل Battery Optimization
       setTimeout(() => {
         requestBatteryOptimization();
-      }, 2000);
+      }, 3000);
     } catch (error) {
-      console.error('Error starting location tracking:', error);
+      console.error('❌ Error starting location tracking:', error);
+      console.error('Error details:', JSON.stringify(error));
+      
       Alert.alert(
-        'تنبيه',
-        'لم يتم تفعيل خدمة التتبع. الرجاء السماح بصلاحيات الموقع'
+        'فشل التفعيل',
+        `لم يتم تفعيل خدمة التتبع.\n\nالخطأ: ${error.message || 'غير معروف'}\n\nالرجاء:\n1. السماح بصلاحيات الموقع\n2. تفعيل GPS\n3. إعادة تشغيل التطبيق`,
+        [{ text: 'حسناً' }]
       );
     }
   };

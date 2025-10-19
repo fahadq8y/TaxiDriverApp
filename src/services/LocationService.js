@@ -219,17 +219,22 @@ class LocationService {
 
   // بدء خدمة التتبع
   static async start() {
+    console.log('🔵 LocationService.start() called');
+    
     if (LocationService.isRunning) {
-      console.log('Location service already running');
+      console.log('⚠️ Location service already running');
       return;
     }
 
+    console.log('🔑 Requesting location permission...');
     const hasPermission = await LocationService.requestLocationPermission();
     
     if (!hasPermission) {
-      console.log('Location permission not granted');
+      console.log('❌ Location permission not granted');
       throw new Error('Location permission not granted');
     }
+    
+    console.log('✅ Location permission granted');
 
     const options = {
       taskName: 'تتبع الموقع',
@@ -252,12 +257,15 @@ class LocationService {
     };
 
     try {
+      console.log('🚀 Starting BackgroundActions...');
       await BackgroundActions.start(LocationService.backgroundTask, options);
       LocationService.isRunning = true;
       LocationService.updateCount = 0;
-      console.log('Location service started successfully');
+      console.log('✅ Location service started successfully');
+      console.log('📢 Notification should be visible now');
     } catch (error) {
-      console.error('Error starting location service:', error);
+      console.error('❌ Error starting location service:', error);
+      console.error('Error details:', JSON.stringify(error));
       throw error;
     }
   }
