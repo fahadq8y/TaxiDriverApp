@@ -101,6 +101,23 @@ class LocationService {
           isActive: true, // تعيين السائق كنشط
         });
 
+      // تحديث في driverLocations (للتتبع المباشر)
+      if (driverNumber) {
+        await firestore()
+          .collection('driverLocations')
+          .doc(driverNumber)
+          .set({
+            driverId: driverNumber,
+            latitude,
+            longitude,
+            speed: speed || 0,
+            heading: heading || 0,
+            accuracy: 0,
+            timestamp: new Date(),
+            localTime: new Date().toISOString(),
+          });
+      }
+
       // حفظ في سجل المواقع
       await firestore()
         .collection('locationHistory')
