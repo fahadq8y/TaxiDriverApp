@@ -164,7 +164,7 @@ class LocationService {
   }
 
   // الحصول على الموقع وتحديثه
-  static async fetchAndUpdateLocation() {
+  static async fetchAndUpdateLocation(driverId) {
     try {
       const position = await new Promise((resolve, reject) => {
         Geolocation.getCurrentPosition(
@@ -213,7 +213,7 @@ class LocationService {
           
           console.log('Watch position update:', { latitude, longitude });
           
-          LocationService.updateLocationInFirebase(
+          LocationService.updateLocationInFirebase(driverId, 
             latitude,
             longitude,
             speed,
@@ -237,11 +237,11 @@ class LocationService {
       // Interval للتحديثات الدورية (backup)
       LocationService.intervalId = setInterval(async () => {
         console.log('Interval update triggered');
-        await LocationService.fetchAndUpdateLocation();
+        await LocationService.fetchAndUpdateLocation(driverId);
       }, 10000); // 10 ثواني
 
       // تحديث فوري عند البدء
-      await LocationService.fetchAndUpdateLocation();
+      await LocationService.fetchAndUpdateLocation(driverId);
     });
   };
 
@@ -294,19 +294,6 @@ class LocationService {
       parameters: {
         delay: 5000,
         driverId: driverId, // <-- تمرير driverId إلى مهمة الخلفية
-      },
-    };
-      taskName: 'تطبيق التاكسي',
-      taskTitle: 'البرنامج نشط',
-      taskDesc: 'التطبيق يعمل في الخلفية',
-      taskIcon: {
-        name: 'ic_launcher',
-        type: 'mipmap',
-      },
-      color: '#FFC107',
-      linkingURI: 'taxidriver://tracking',
-      parameters: {
-        delay: 5000,
       },
     };
 
