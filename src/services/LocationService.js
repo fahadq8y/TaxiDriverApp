@@ -32,7 +32,7 @@ class LocationService {
       }
 
       // تهيئة BackgroundGeolocation
-      BackgroundGeolocation.ready({
+      await BackgroundGeolocation.ready({
         // Geolocation Config
         desiredAccuracy: BackgroundGeolocation.DESIRED_ACCURACY_HIGH,
         distanceFilter: 10, // متر - يحدث الموقع كل 10 متر
@@ -68,15 +68,10 @@ class LocationService {
         // iOS specific (للمستقبل)
         preventSuspend: true,
         heartbeatInterval: 60,
-      }, (state) => {
-        console.log('✅ BackgroundGeolocation is configured and ready:', state);
-        this.isConfigured = true;
-        
-        if (!state.enabled) {
-          console.log('🔵 Starting BackgroundGeolocation...');
-          BackgroundGeolocation.start();
-        }
       });
+      
+      console.log('✅ BackgroundGeolocation is configured and ready');
+      this.isConfigured = true;
 
       // الاستماع لتحديثات الموقع
       BackgroundGeolocation.onLocation(async (location) => {
@@ -126,25 +121,43 @@ class LocationService {
     try {
       console.log('🔵 Starting location tracking for driver:', driverId);
 
+      if (!driverId) {
+        console.error('❌ No driverId provided');
+        return false;
+      }
+
       // حفظ driverId في AsyncStorage
-      await AsyncStorage.setItem('driverId', driverId);
+      await AsyncStorage.setItem('driverId', String(driverId));
       console.log('✅ Saved driverId to AsyncStorage:', driverId);
 
       // تهيئة الخدمة إذا لم تكن مهيأة
       if (!this.isConfigured) {
+        console.log('🔵 Configuring service first...');
         await this.configure();
       }
 
-      // بدء التتبع
-      const state = await BackgroundGeolocation.start();
-      console.log('✅ Location tracking started:', state);
-      
-      ToastAndroid.show('✅ تم بدء التتبع بنجاح', ToastAndroid.LONG);
-      
-      return true;
+      // بدء التتبع مع معالجة أفضل للأخطاء
+      try {
+        const state = await BackgroundGeolocation.start();
+        console.log('✅ Location tracking started successfully');
+        console.log('📊 State:', state);
+        
+        // Don't show toast to avoid UI interruption
+        // ToastAndroid.show('✅ تم بدء التتبع بنجاح', ToastAndroid.SHORT);
+        
+        return true;
+      } catch (startError) {
+        console.error('❌ Error calling BackgroundGeolocation.start():', startError);
+        console.error('❌ Error details:', JSON.stringify(startError));
+        
+        // Don't throw, just return false
+        return false;
+      }
     } catch (error) {
-      console.error('❌ Error starting location tracking:', error);
-      ToastAndroid.show(`❌ خطأ في بدء التتبع: ${error.message}`, ToastAndroid.LONG);
+      console.error('❌ Error in start() method:', error);
+      console.error('❌ Error stack:', error.stack);
+      
+      // Don't show any UI that might crash the app
       return false;
     }
   }
