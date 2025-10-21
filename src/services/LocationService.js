@@ -255,7 +255,8 @@ class LocationService {
     }
     
     console.log('✅ BACKGROUND_TASK: driverId found:', driverId);
-    console.log('═══════════════════════════════════════════════════════════════');}
+    console.log('═══════════════════════════════════════════════════════════════');
+    
     await new Promise(async (resolve) => {
       const hasPermission = await LocationService.requestLocationPermission();
       
