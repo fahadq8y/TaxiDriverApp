@@ -82,41 +82,18 @@ const MainScreen = ({ navigation, route }) => {
   const checkAndRequestBatteryOptimization = async () => {
     if (Platform.OS === 'android') {
       try {
-        // التحقق من حالة Battery Optimization
-        const isIgnoringBatteryOptimizations = await PowerManagerModule?.isIgnoringBatteryOptimizations();
-        
-        // إذا كانت معطّلة بالفعل، لا داعي لإظهار الرسالة
-        if (isIgnoringBatteryOptimizations) {
-          console.log('✅ Battery optimization already disabled');
-          return;
-        }
-
-        // التحقق من AsyncStorage إذا تم إظهار الرسالة سابقاً
-        const batteryOptimizationAsked = await AsyncStorage.getItem('batteryOptimizationAsked');
-        
-        if (batteryOptimizationAsked === 'true') {
-          console.log('Battery optimization message already shown before');
-          return;
-        }
-
-        // إظهار الرسالة مرة واحدة فقط
+        // فتح إعدادات Battery Optimization مباشرة
         Alert.alert(
           'تفعيل التتبع المستمر',
-          'للتتبع المستمر حتى عند قفل الشاشة، يجب تعطيل تحسين البطارية للتطبيق',
+          'للتتبع المستمر حتى عند قفل الشاشة، يجب تعطيل تحسين البطارية للتطبيق\n\nخطوات:\n1. اضغط "فتح الإعدادات"\n2. ابحث عن "البطارية" أو "Battery"\n3. اختر "تحسين البطارية" أو "Battery Optimization"\n4. ابحث عن التطبيق واختر "عدم التحسين" أو "Don\'t optimize"',
           [
             {
               text: 'إلغاء',
               style: 'cancel',
-              onPress: async () => {
-                // حفظ أن المستخدم رأى الرسالة
-                await AsyncStorage.setItem('batteryOptimizationAsked', 'true');
-              },
             },
             {
               text: 'فتح الإعدادات',
-              onPress: async () => {
-                // حفظ أن المستخدم رأى الرسالة
-                await AsyncStorage.setItem('batteryOptimizationAsked', 'true');
+              onPress: () => {
                 Linking.openSettings();
               },
             },
