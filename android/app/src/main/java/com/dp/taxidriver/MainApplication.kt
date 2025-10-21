@@ -1,4 +1,4 @@
-package com.taxidriverapp
+package com.dp.taxidriver
 
 import android.app.Application
 import com.facebook.react.PackageList
@@ -25,3 +25,4 @@ class MainApplication : Application(), ReactApplication {
     loadReactNative(this)
   }
 }
+
