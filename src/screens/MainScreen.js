@@ -42,10 +42,13 @@ const MainScreen = ({ navigation, route }) => {
   }, []);
 
   useEffect(() => {
+    // Don't start location tracking automatically
+    // User will start it manually or we'll request permissions properly
     if (driverId && !locationServiceStarted) {
-      startLocationTracking(driverId);
+      // Just log that we're ready, don't start automatically
+      console.log('🟢 MAIN: Driver ID loaded, ready to start tracking:', driverId);
     }
-  }, [userId]);
+  }, [driverId]);
 
   const loadDriverData = async () => {
     try {
@@ -118,61 +121,31 @@ const MainScreen = ({ navigation, route }) => {
       
       console.log('🚀 Attempting to start location tracking...');
       
-      await LocationService.start(currentDriverId);
-      setLocationServiceStarted(true);
-      console.log('✅ Location tracking started successfully');
+      const started = await LocationService.start(currentDriverId);
       
-      Alert.alert(
-        'نجح التفعيل',
-        'تم تفعيل خدمة التتبع بنجاح! يجب أن تشاهد إشعار في شريط الإشعارات.',
-        [{ text: 'حسناً' }]
-      );
+      if (started) {
+        setLocationServiceStarted(true);
+        console.log('✅ Location tracking started successfully');
+        
+        // Don't show alert, just show a toast-like notification
+        // Alert.alert(
+        //   'نجح التفعيل',
+        //   'تم تفعيل خدمة التتبع بنجاح!',
+        //   [{ text: 'حسناً' }]
+        // );
+      } else {
+        console.log('⚠️ Location tracking failed to start');
+      }
       
-      // التحقق من Battery Optimization بعد 3 ثواني
-      setTimeout(() => {
-        checkAndRequestBatteryOptimization();
-      }, 3000);
+      // Don't automatically request battery optimization
+      // User can do this manually if needed
     } catch (error) {
       console.error('❌ Error starting location tracking:', error);
       console.error('Error details:', JSON.stringify(error));
       
-      // معالجة خاصة لخطأ صلاحية الإشعارات
-      if (error.message === 'NOTIFICATION_PERMISSION_DENIED') {
-        Alert.alert(
-          'صلاحية الإشعارات مطلوبة',
-          'لتفعيل خدمة التتبع، يجب السماح بالإشعارات.\n\nالإشعار ضروري لعمل التتبع في الخلفية.\n\nالرجاء:\n1. فتح إعدادات التطبيق\n2. تفعيل "السماح بالإشعارات"\n3. العودة للتطبيق',
-          [
-            {
-              text: 'إلغاء',
-              style: 'cancel',
-            },
-            {
-              text: 'فتح الإعدادات',
-              onPress: () => {
-                Linking.openSettings();
-              },
-            },
-          ]
-        );
-      } else {
-        // رسالة خطأ عامة
-        Alert.alert(
-          'فشل التفعيل',
-          `لم يتم تفعيل خدمة التتبع.\n\n${error.message || 'خطأ غير معروف'}\n\nالرجاء:\n1. السماح بصلاحيات الموقع\n2. تفعيل الإشعارات\n3. تفعيل GPS\n4. إعادة تشغيل التطبيق`,
-          [
-            {
-              text: 'إلغاء',
-              style: 'cancel',
-            },
-            {
-              text: 'فتح الإعدادات',
-              onPress: () => {
-                Linking.openSettings();
-              },
-            },
-          ]
-        );
-      }
+      // Don't show any alerts that might crash the app
+      // Just log the error and continue
+      console.log('🟡 MAIN: Location tracking failed, but app continues running');
     }
   };
 
