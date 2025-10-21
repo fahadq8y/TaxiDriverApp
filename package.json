@@ -1,6 +1,6 @@
 {
   "name": "TaxiDriverApp",
-  "version": "1.0.57b7743",
+  "version": "1.0.c0d2136",
   "private": true,
   "scripts": {
     "android": "react-native run-android",
