@@ -3,7 +3,7 @@ import BackgroundActions from 'react-native-background-actions';
 import Geolocation from 'react-native-geolocation-service';
 import firestore from '@react-native-firebase/firestore';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { PermissionsAndroid, Platform, AppState } from 'react-native';
+import { PermissionsAndroid, Platform, AppState, ToastAndroid } from 'react-native';
 
 class LocationService {
   static isRunning = false;
@@ -196,6 +196,9 @@ class LocationService {
       console.error('❌ Error stack:', error.stack);
       console.error('❌ Full error:', JSON.stringify(error, null, 2));
       console.error('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+      
+      // Toast notification للخطأ
+      ToastAndroid.show(`❌ خطأ في حفظ الموقع: ${error.message}`, ToastAndroid.LONG);
     }
   }
 
