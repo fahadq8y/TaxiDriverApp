@@ -14,6 +14,7 @@ import {
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import firestore from '@react-native-firebase/firestore';
+import packageJson from '../../package.json';
 
 const LoginScreen = ({ navigation }) => {
   const [username, setUsername] = useState('');
@@ -146,7 +147,7 @@ const LoginScreen = ({ navigation }) => {
         </View>
 
         <Text style={styles.footer}>جميع الحقوق محفوظة © 2025</Text>
-        <Text style={styles.versionText}>الإصدار: 012b1d0</Text>
+        <Text style={styles.versionText}>الإصدار: {packageJson.version}</Text>
       </ScrollView>
     </KeyboardAvoidingView>
   );
