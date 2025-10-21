@@ -7,6 +7,25 @@
   "client": [
     {
       "client_info": {
+        "mobilesdk_app_id": "1:720874424166:android:fcb759006209f883e5eaa7",
+        "android_client_info": {
+          "package_name": "com.dp.taxidriver"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBKkKE3sVo-1yJroTNoJgU4hWeUcUzaJ-A"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    },
+    {
+      "client_info": {
         "mobilesdk_app_id": "1:720874424166:android:554f5ebf68edc986e5eaa7",
         "android_client_info": {
           "package_name": "com.taxidriverapp"
