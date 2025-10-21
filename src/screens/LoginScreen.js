@@ -65,20 +65,42 @@ const LoginScreen = ({ navigation }) => {
       console.log('🔵 LOGIN: driverId from userData:', userData.driverId);
       console.log('🔵 LOGIN: userDoc.id:', userDoc.id);
       
-      const driverIdToSave = userData.driverId || userDoc.id;
-      console.log('🔵 LOGIN: driverId to save:', driverIdToSave);
+      // التأكد من وجود القيم المطلوبة
+      const userId = userDoc.id || '';
+      const userName = userData.name || '';
+      const driverIdToSave = userData.driverId || userData.employeeNumber || userDoc.id || '';
       
-      await AsyncStorage.setItem('userId', userDoc.id);
-      await AsyncStorage.setItem('userName', userData.name);
-      await AsyncStorage.setItem('userRole', 'driver');
-      await AsyncStorage.setItem('driverId', driverIdToSave);
+      console.log('🔵 LOGIN: Values to save:', {
+        userId,
+        userName,
+        driverIdToSave
+      });
       
-      // التحقق من الحفظ
-      const savedDriverId = await AsyncStorage.getItem('driverId');
-      console.log('✅ LOGIN: driverId saved successfully:', savedDriverId);
+      // التحقق من أن القيم ليست فارغة
+      if (!userId || !driverIdToSave) {
+        console.error('❌ LOGIN: Missing required values!');
+        Alert.alert('خطأ', 'بيانات المستخدم غير مكتملة. الرجاء التواصل مع الإدارة.');
+        setLoading(false);
+        return;
+      }
+      
+      try {
+        await AsyncStorage.setItem('userId', userId);
+        await AsyncStorage.setItem('userName', userName);
+        await AsyncStorage.setItem('userRole', 'driver');
+        await AsyncStorage.setItem('driverId', driverIdToSave);
+        
+        // التحقق من الحفظ
+        const savedDriverId = await AsyncStorage.getItem('driverId');
+        console.log('✅ LOGIN: driverId saved successfully:', savedDriverId);
 
-      setLoading(false);
-      navigation.replace('Main');
+        setLoading(false);
+        navigation.replace('Main');
+      } catch (storageError) {
+        console.error('❌ LOGIN: AsyncStorage error:', storageError);
+        Alert.alert('خطأ', 'فشل حفظ بيانات تسجيل الدخول: ' + storageError.message);
+        setLoading(false);
+      }
     } catch (error) {
       console.error('Login error:', error);
       Alert.alert('خطأ', 'حدث خطأ أثناء تسجيل الدخول');
