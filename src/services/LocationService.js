@@ -202,8 +202,9 @@ class LocationService {
     console.log('🔵 BACKGROUND_TASK: started');
     console.log('🔵 BACKGROUND_TASK: taskData received:', JSON.stringify(taskData));
     
-    const driverId = taskData?.driverId;
-    console.log('🔵 BACKGROUND_TASK: extracted driverId:', driverId);
+    // قراءة driverId من AsyncStorage مباشرة (بدلاً من taskData)
+    const driverId = await AsyncStorage.getItem('driverId');
+    console.log('🔵 BACKGROUND_TASK: driverId from AsyncStorage:', driverId);
     
     if (!driverId) {
       console.log('❌ BACKGROUND_TASK: FATAL ERROR - driverId is null or undefined!');
