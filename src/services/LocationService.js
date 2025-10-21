@@ -124,7 +124,7 @@ class LocationService {
         longitude,
         speed: speed || 0,
         heading: heading || 0,
-        timestamp: firestore.FieldValue.serverTimestamp(),
+        timestamp: new Date(),
         lastUpdate: new Date().toISOString(),
         appState: AppState.currentState,
         updateCount: ++LocationService.updateCount,
@@ -137,7 +137,7 @@ class LocationService {
           .doc(userId)
           .update({
             location: locationData,
-            lastSeen: firestore.FieldValue.serverTimestamp(),
+            lastSeen: new Date(),
             isActive: true,
           });
       }
