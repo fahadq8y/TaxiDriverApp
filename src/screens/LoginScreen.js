@@ -146,6 +146,7 @@ const LoginScreen = ({ navigation }) => {
         </View>
 
         <Text style={styles.footer}>جميع الحقوق محفوظة © 2025</Text>
+        <Text style={styles.versionText}>الإصدار: 012b1d0</Text>
       </ScrollView>
     </KeyboardAvoidingView>
   );
@@ -246,7 +247,14 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     color: '#999',
     fontSize: 12,
+    paddingBottom: 5,
+  },
+  versionText: {
+    textAlign: 'center',
+    color: '#bbb',
+    fontSize: 10,
     paddingBottom: 20,
+    fontFamily: 'monospace',
   },
 });
 
