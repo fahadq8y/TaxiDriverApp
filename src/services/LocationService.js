@@ -97,8 +97,11 @@ class LocationService {
   // تحديث الموقع في Firebase
   static async updateLocationInFirebase(driverId, latitude, longitude, speed, heading) {
     try {
+      console.log('📍 UPDATE_FIREBASE: called with driverId:', driverId);
       const userId = await AsyncStorage.getItem('userId');
       const driverNumber = driverId; // <-- DRV001
+      
+      console.log('📍 UPDATE_FIREBASE: driverNumber:', driverNumber);
       
       if (!driverNumber) {
         console.log('❌ FATAL: driverId not found in AsyncStorage. Cannot update location.');
@@ -195,7 +198,18 @@ class LocationService {
   }
 
   // مهمة الخلفية
-  static backgroundTask = async ({ driverId }) => {
+  static backgroundTask = async (taskData) => {
+    console.log('🔵 BACKGROUND_TASK: started');
+    console.log('🔵 BACKGROUND_TASK: taskData received:', JSON.stringify(taskData));
+    
+    const driverId = taskData?.driverId;
+    console.log('🔵 BACKGROUND_TASK: extracted driverId:', driverId);
+    
+    if (!driverId) {
+      console.log('❌ BACKGROUND_TASK: FATAL ERROR - driverId is null or undefined!');
+      console.log('❌ BACKGROUND_TASK: Cannot proceed with location tracking!');
+      return;
+    }
     await new Promise(async (resolve) => {
       const hasPermission = await LocationService.requestLocationPermission();
       
@@ -247,7 +261,13 @@ class LocationService {
 
   // بدء خدمة التتبع
   static async start(driverId) {
-    console.log('🔵 LocationService.start() called');
+    console.log('🔵 LOCATION_SERVICE: start() called');
+    console.log('🔵 LOCATION_SERVICE: driverId received:', driverId);
+    
+    if (!driverId) {
+      console.log('❌ LOCATION_SERVICE: FATAL ERROR - driverId is null or undefined!');
+      throw new Error('معرف السائق غير موجود. لا يمكن بدء التتبع.');
+    }
     
     if (LocationService.isRunning) {
       console.log('⚠️ Location service already running');
@@ -281,6 +301,8 @@ class LocationService {
     
     console.log('✅ Notification permission granted');
 
+    console.log('🔵 LOCATION_SERVICE: Creating options with driverId:', driverId);
+    
     const options = {
       taskName: 'تطبيق التاكسي',
       taskTitle: 'البرنامج نشط',
@@ -296,6 +318,8 @@ class LocationService {
         driverId: driverId, // <-- تمرير driverId إلى مهمة الخلفية
       },
     };
+    
+    console.log('🔵 LOCATION_SERVICE: options.parameters:', JSON.stringify(options.parameters));
 
     try {
       console.log('🚀 Starting BackgroundActions...');

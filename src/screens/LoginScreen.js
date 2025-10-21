@@ -60,10 +60,21 @@ const LoginScreen = ({ navigation }) => {
       }
 
       // حفظ بيانات المستخدم
+      console.log('🔵 LOGIN: User data from Firestore:', JSON.stringify(userData));
+      console.log('🔵 LOGIN: driverId from userData:', userData.driverId);
+      console.log('🔵 LOGIN: userDoc.id:', userDoc.id);
+      
+      const driverIdToSave = userData.driverId || userDoc.id;
+      console.log('🔵 LOGIN: driverId to save:', driverIdToSave);
+      
       await AsyncStorage.setItem('userId', userDoc.id);
       await AsyncStorage.setItem('userName', userData.name);
       await AsyncStorage.setItem('userRole', 'driver');
-      await AsyncStorage.setItem('driverId', userData.driverId || userDoc.id);
+      await AsyncStorage.setItem('driverId', driverIdToSave);
+      
+      // التحقق من الحفظ
+      const savedDriverId = await AsyncStorage.getItem('driverId');
+      console.log('✅ LOGIN: driverId saved successfully:', savedDriverId);
 
       setLoading(false);
       navigation.replace('Main');

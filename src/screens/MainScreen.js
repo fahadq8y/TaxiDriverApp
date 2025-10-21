@@ -49,13 +49,21 @@ const MainScreen = ({ navigation, route }) => {
 
   const loadDriverData = async () => {
     try {
+      console.log('🔵 MAIN: Loading driver data from AsyncStorage...');
       const storedUserId = await AsyncStorage.getItem('userId');
       const storedDriverName = await AsyncStorage.getItem('userName');
       const storedDriverId = await AsyncStorage.getItem('driverId');
       
+      console.log('🔵 MAIN: storedUserId:', storedUserId);
+      console.log('🔵 MAIN: storedDriverName:', storedDriverName);
+      console.log('🔵 MAIN: storedDriverId:', storedDriverId);
+      
       if (storedUserId) {
+        console.log('✅ MAIN: Setting state with stored data');
         setUserId(storedUserId);
-        setDriverId(storedDriverId || storedUserId);
+        const finalDriverId = storedDriverId || storedUserId;
+        console.log('🔵 MAIN: finalDriverId to set:', finalDriverId);
+        setDriverId(finalDriverId);
         setDriverName(storedDriverName || '');
       } else if (route.params?.driverId) {
         setDriverId(route.params.driverId);
@@ -122,6 +130,15 @@ const MainScreen = ({ navigation, route }) => {
 
   const startLocationTracking = async (currentDriverId) => {
     try {
+      console.log('🚀 MAIN: Attempting to start location tracking...');
+      console.log('🚀 MAIN: currentDriverId received:', currentDriverId);
+      
+      if (!currentDriverId) {
+        console.log('❌ MAIN: ERROR - currentDriverId is null or undefined!');
+        Alert.alert('خطأ', 'لم يتم العثور على معرف السائق. الرجاء تسجيل الدخول مرة أخرى.');
+        return;
+      }
+      
       console.log('🚀 Attempting to start location tracking...');
       
       await LocationService.start(currentDriverId);
