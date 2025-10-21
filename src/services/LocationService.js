@@ -97,11 +97,20 @@ class LocationService {
   // تحديث الموقع في Firebase
   static async updateLocationInFirebase(driverId, latitude, longitude, speed, heading) {
     try {
-      console.log('📍 UPDATE_FIREBASE: called with driverId:', driverId);
-      const userId = await AsyncStorage.getItem('userId');
-      const driverNumber = driverId; // <-- DRV001
+      console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+      console.log('📍 UPDATE_FIREBASE: START');
+      console.log('📍 UPDATE_FIREBASE: driverId parameter:', driverId);
+      console.log('📍 UPDATE_FIREBASE: latitude:', latitude);
+      console.log('📍 UPDATE_FIREBASE: longitude:', longitude);
+      console.log('📍 UPDATE_FIREBASE: speed:', speed);
+      console.log('📍 UPDATE_FIREBASE: heading:', heading);
       
-      console.log('📍 UPDATE_FIREBASE: driverNumber:', driverNumber);
+      const userId = await AsyncStorage.getItem('userId');
+      console.log('📍 UPDATE_FIREBASE: userId from AsyncStorage:', userId);
+      
+      const driverNumber = driverId; // <-- DRV001
+      console.log('📍 UPDATE_FIREBASE: driverNumber (final):', driverNumber);
+      console.log('📍 UPDATE_FIREBASE: driverNumber type:', typeof driverNumber);
       
       if (!driverNumber) {
         console.log('❌ FATAL: driverId not found in AsyncStorage. Cannot update location.');
@@ -134,8 +143,22 @@ class LocationService {
       }
 
       // تحديث في driverLocations (للتتبع المباشر) - هذا هو الجزء الأهم!
-      console.log(`📤 Updating driverLocations for: ${driverNumber}`);
-      await firestore()
+      console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+      console.log('📤 WRITING TO FIRESTORE driverLocations...');
+      console.log('📤 Collection: driverLocations');
+      console.log('📤 Document ID:', driverNumber);
+      console.log('📤 Data to write:', {
+        driverId: driverNumber,
+        latitude,
+        longitude,
+        speed: speed || 0,
+        heading: heading || 0,
+        accuracy: 0,
+        timestamp: new Date().toISOString(),
+        localTime: new Date().toISOString(),
+      });
+      
+      const writeResult = await firestore()
         .collection('driverLocations')
         .doc(driverNumber) // <-- الاستخدام المباشر لـ DRV001
         .set({
@@ -148,7 +171,10 @@ class LocationService {
           timestamp: new Date(),
           localTime: new Date().toISOString(),
         });
-      console.log('✅ driverLocations updated successfully');
+      
+      console.log('✅✅✅ driverLocations WRITE SUCCESS!');
+      console.log('✅ Write result:', writeResult);
+      console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
 
       // حفظ في سجل المواقع
       await firestore()
@@ -160,9 +186,16 @@ class LocationService {
         });
 
       LocationService.lastLocation = { latitude, longitude };
-      console.log(`Location updated successfully (${LocationService.updateCount})`);
+      console.log(`✅ Location updated successfully (count: ${LocationService.updateCount})`);
+      console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
     } catch (error) {
-      console.error('❌ Error updating location in Firebase:', error);
+      console.error('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+      console.error('❌❌❌ ERROR in updateLocationInFirebase!');
+      console.error('❌ Error message:', error.message);
+      console.error('❌ Error code:', error.code);
+      console.error('❌ Error stack:', error.stack);
+      console.error('❌ Full error:', JSON.stringify(error, null, 2));
+      console.error('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
     }
   }
 
@@ -199,18 +232,30 @@ class LocationService {
 
   // مهمة الخلفية
   static backgroundTask = async (taskData) => {
-    console.log('🔵 BACKGROUND_TASK: started');
+    console.log('═══════════════════════════════════════════════════════════════');
+    console.log('🔵🔵🔵 BACKGROUND_TASK: STARTED');
+    console.log('═══════════════════════════════════════════════════════════════');
     console.log('🔵 BACKGROUND_TASK: taskData received:', JSON.stringify(taskData));
+    console.log('🔵 BACKGROUND_TASK: taskData.parameters:', JSON.stringify(taskData?.parameters));
     
     // قراءة driverId من AsyncStorage مباشرة (بدلاً من taskData)
+    console.log('🔵 BACKGROUND_TASK: Reading driverId from AsyncStorage...');
     const driverId = await AsyncStorage.getItem('driverId');
     console.log('🔵 BACKGROUND_TASK: driverId from AsyncStorage:', driverId);
+    console.log('🔵 BACKGROUND_TASK: driverId type:', typeof driverId);
+    console.log('🔵 BACKGROUND_TASK: driverId length:', driverId?.length);
     
     if (!driverId) {
-      console.log('❌ BACKGROUND_TASK: FATAL ERROR - driverId is null or undefined!');
-      console.log('❌ BACKGROUND_TASK: Cannot proceed with location tracking!');
+      console.error('═══════════════════════════════════════════════════════════════');
+      console.error('❌❌❌ BACKGROUND_TASK: FATAL ERROR - driverId is null or undefined!');
+      console.error('❌ BACKGROUND_TASK: Cannot proceed with location tracking!');
+      console.error('❌ BACKGROUND_TASK: Check if driverId was saved during login!');
+      console.error('═══════════════════════════════════════════════════════════════');
       return;
     }
+    
+    console.log('✅ BACKGROUND_TASK: driverId found:', driverId);
+    console.log('═══════════════════════════════════════════════════════════════');}
     await new Promise(async (resolve) => {
       const hasPermission = await LocationService.requestLocationPermission();
       
