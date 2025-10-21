@@ -108,6 +108,17 @@ android {
     }
 }
 
+repositories {
+    google()
+    mavenCentral()
+    maven {
+        url "${project(':react-native-background-geolocation').projectDir}/libs"
+    }
+    maven {
+        url 'https://maven.transistorsoft.com/releases/local'
+    }
+}
+
 dependencies {
     // The version of react-native is set by the React Native Gradle Plugin
     implementation("com.facebook.react:react-android")
