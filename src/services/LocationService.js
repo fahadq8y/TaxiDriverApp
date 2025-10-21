@@ -1,163 +1,255 @@
-import BackgroundGeolocation from '@mauron85/react-native-background-geolocation';
-import firestore from '@react-native-firebase/firestore';
+import BackgroundGeolocation from 'react-native-background-geolocation';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import firestore from '@react-native-firebase/firestore';
 import { ToastAndroid } from 'react-native';
 
 class LocationService {
-  static isRunning = false;
-  static driverId = null;
+  constructor() {
+    this.isConfigured = false;
+  }
 
-  static async start(driverId) {
+  // تهيئة الخدمة
+  async configure() {
+    if (this.isConfigured) {
+      console.log('🔵 LocationService already configured');
+      return;
+    }
+
     try {
-      console.log('🚀 Starting LocationService with driverId:', driverId);
-      
+      console.log('🔵 Configuring LocationService with Transistor SDK...');
+
+      // الحصول على driverId من AsyncStorage
+      const driverId = await AsyncStorage.getItem('driverId');
+      const userId = await AsyncStorage.getItem('userId');
+
+      console.log('📍 Retrieved from AsyncStorage:', { driverId, userId });
+      ToastAndroid.show(`Driver ID: ${driverId || 'Not found'}`, ToastAndroid.LONG);
+
       if (!driverId) {
-        console.error('❌ No driverId provided!');
-        ToastAndroid.show('❌ خطأ: لم يتم توفير معرف السائق', ToastAndroid.LONG);
+        console.error('❌ No driverId found in AsyncStorage');
+        ToastAndroid.show('❌ خطأ: لم يتم العثور على معرف السائق', ToastAndroid.LONG);
         return;
       }
 
-      // حفظ driverId
-      this.driverId = driverId;
-      await AsyncStorage.setItem('driverId', driverId);
-      console.log('✅ Saved driverId to AsyncStorage:', driverId);
-
-      // إعداد BackgroundGeolocation
-      BackgroundGeolocation.configure({
-        desiredAccuracy: BackgroundGeolocation.HIGH_ACCURACY,
-        stationaryRadius: 10,
-        distanceFilter: 10,
-        notificationTitle: 'البرنامج نشط',
-        notificationText: 'التطبيق يعمل في الخلفية',
+      // تهيئة BackgroundGeolocation
+      BackgroundGeolocation.ready({
+        // License Key
+        license: '6c61f89b598dabe110900e7926bccf8a3f916ebca075a4ee03350712f6d30e83',
+        
+        // Geolocation Config
+        desiredAccuracy: BackgroundGeolocation.DESIRED_ACCURACY_HIGH,
+        distanceFilter: 10, // متر - يحدث الموقع كل 10 متر
+        stationaryRadius: 25,
+        
+        // Activity Recognition
+        stopTimeout: 5, // دقائق
+        
+        // Application config
         debug: false, // تعطيل debug في production
-        startOnBoot: false,
-        stopOnTerminate: false,
-        locationProvider: BackgroundGeolocation.ACTIVITY_PROVIDER,
-        interval: 10000, // 10 ثواني
-        fastestInterval: 5000, // 5 ثواني
-        activitiesInterval: 10000,
-        stopOnStillActivity: false,
-        notificationsEnabled: true,
-        startForeground: true,
+        logLevel: BackgroundGeolocation.LOG_LEVEL_VERBOSE,
+        stopOnTerminate: false, // الاستمرار حتى بعد إغلاق التطبيق
+        startOnBoot: true, // البدء تلقائياً عند إعادة تشغيل الجهاز
+        
+        // HTTP / SQLite config
+        autoSync: false, // لا نستخدم HTTP posting
+        
+        // Geofencing
+        geofenceProximityRadius: 1000,
+        
+        // Android specific
+        foregroundService: true,
+        enableHeadless: true,
+        notification: {
+          title: 'البرنامج نشط',
+          text: 'التطبيق يعمل في الخلفية',
+          color: '#4CAF50',
+          channelName: 'Location Tracking',
+          smallIcon: 'drawable/ic_notification',
+          largeIcon: 'drawable/ic_launcher',
+        },
+        
+        // iOS specific (للمستقبل)
+        preventSuspend: true,
+        heartbeatInterval: 60,
+      }, (state) => {
+        console.log('✅ BackgroundGeolocation is configured and ready:', state);
+        this.isConfigured = true;
+        
+        if (!state.enabled) {
+          console.log('🔵 Starting BackgroundGeolocation...');
+          BackgroundGeolocation.start();
+        }
       });
 
       // الاستماع لتحديثات الموقع
-      BackgroundGeolocation.on('location', (location) => {
+      BackgroundGeolocation.onLocation(async (location) => {
         console.log('📍 Location received:', location);
-        this.updateLocationInFirebase(location);
+        ToastAndroid.show(`📍 موقع جديد: ${location.coords.latitude.toFixed(4)}, ${location.coords.longitude.toFixed(4)}`, ToastAndroid.SHORT);
+        
+        await this.updateLocationInFirebase(driverId, location);
+      }, (error) => {
+        console.error('❌ Location error:', error);
+        ToastAndroid.show(`❌ خطأ في الموقع: ${error}`, ToastAndroid.LONG);
+      });
+
+      // الاستماع لتغيرات الحركة
+      BackgroundGeolocation.onMotionChange((event) => {
+        console.log('🚗 Motion change:', event);
+      });
+
+      // الاستماع لتغيرات الحالة
+      BackgroundGeolocation.onProviderChange((provider) => {
+        console.log('⚙️ Provider change:', provider);
+        
+        if (!provider.gps) {
+          ToastAndroid.show('⚠️ تحذير: GPS غير مفعل!', ToastAndroid.LONG);
+        }
+        
+        if (!provider.enabled) {
+          ToastAndroid.show('⚠️ تحذير: خدمة الموقع معطلة!', ToastAndroid.LONG);
+        }
       });
 
       // الاستماع للأخطاء
-      BackgroundGeolocation.on('error', (error) => {
-        console.error('❌ BackgroundGeolocation error:', error);
-        ToastAndroid.show(`❌ خطأ في الموقع: ${error.message}`, ToastAndroid.LONG);
+      BackgroundGeolocation.onHeartbeat((event) => {
+        console.log('💓 Heartbeat:', event);
       });
 
-      // الاستماع لتغيير الحالة
-      BackgroundGeolocation.on('stationary', (location) => {
-        console.log('🛑 Stationary location:', location);
-        this.updateLocationInFirebase(location);
-      });
+      console.log('✅ LocationService configured successfully');
+      ToastAndroid.show('✅ تم تفعيل خدمة التتبع بنجاح', ToastAndroid.LONG);
 
-      // بدء الخدمة
-      BackgroundGeolocation.start();
-      this.isRunning = true;
-      
-      console.log('✅ LocationService started successfully');
-      ToastAndroid.show('✅ تم بدء خدمة التتبع بنجاح', ToastAndroid.SHORT);
-      
     } catch (error) {
-      console.error('❌ Error starting LocationService:', error);
-      ToastAndroid.show(`❌ خطأ في بدء الخدمة: ${error.message}`, ToastAndroid.LONG);
+      console.error('❌ Error configuring LocationService:', error);
+      ToastAndroid.show(`❌ خطأ في تفعيل الخدمة: ${error.message}`, ToastAndroid.LONG);
     }
   }
 
-  static async stop() {
+  // بدء التتبع
+  async start(driverId) {
     try {
-      console.log('🛑 Stopping LocationService...');
-      
-      BackgroundGeolocation.stop();
-      BackgroundGeolocation.removeAllListeners();
-      
-      this.isRunning = false;
-      this.driverId = null;
-      
-      console.log('✅ LocationService stopped successfully');
-      ToastAndroid.show('✅ تم إيقاف خدمة التتبع', ToastAndroid.SHORT);
-      
-    } catch (error) {
-      console.error('❌ Error stopping LocationService:', error);
-      ToastAndroid.show(`❌ خطأ في إيقاف الخدمة: ${error.message}`, ToastAndroid.LONG);
-    }
-  }
+      console.log('🔵 Starting location tracking for driver:', driverId);
 
-  static async updateLocationInFirebase(location) {
-    try {
-      const driverId = this.driverId || await AsyncStorage.getItem('driverId');
-      
-      if (!driverId) {
-        console.error('❌ No driverId found for updating location');
-        return;
+      // حفظ driverId في AsyncStorage
+      await AsyncStorage.setItem('driverId', driverId);
+      console.log('✅ Saved driverId to AsyncStorage:', driverId);
+
+      // تهيئة الخدمة إذا لم تكن مهيأة
+      if (!this.isConfigured) {
+        await this.configure();
       }
 
-      console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
-      console.log('📤 Updating location in Firebase for driver:', driverId);
+      // بدء التتبع
+      const state = await BackgroundGeolocation.start();
+      console.log('✅ Location tracking started:', state);
+      
+      ToastAndroid.show('✅ تم بدء التتبع بنجاح', ToastAndroid.LONG);
+      
+      return true;
+    } catch (error) {
+      console.error('❌ Error starting location tracking:', error);
+      ToastAndroid.show(`❌ خطأ في بدء التتبع: ${error.message}`, ToastAndroid.LONG);
+      return false;
+    }
+  }
+
+  // إيقاف التتبع
+  async stop() {
+    try {
+      console.log('🔵 Stopping location tracking...');
+      
+      await BackgroundGeolocation.stop();
+      
+      console.log('✅ Location tracking stopped');
+      ToastAndroid.show('✅ تم إيقاف التتبع', ToastAndroid.SHORT);
+      
+      return true;
+    } catch (error) {
+      console.error('❌ Error stopping location tracking:', error);
+      ToastAndroid.show(`❌ خطأ في إيقاف التتبع: ${error.message}`, ToastAndroid.LONG);
+      return false;
+    }
+  }
+
+  // الحصول على الحالة الحالية
+  async getState() {
+    try {
+      const state = await BackgroundGeolocation.getState();
+      console.log('📊 Current state:', state);
+      return state;
+    } catch (error) {
+      console.error('❌ Error getting state:', error);
+      return null;
+    }
+  }
+
+  // تحديث الموقع في Firestore
+  async updateLocationInFirebase(driverId, location) {
+    try {
+      console.log('═══════════════════════════════════════════════════════════════');
+      console.log('📤 UPDATE_FIREBASE: Starting update...');
+      console.log('📍 Driver ID:', driverId);
       console.log('📍 Location:', {
-        latitude: location.latitude,
-        longitude: location.longitude,
-        speed: location.speed,
-        accuracy: location.accuracy,
+        latitude: location.coords.latitude,
+        longitude: location.coords.longitude,
+        accuracy: location.coords.accuracy,
+        speed: location.coords.speed,
+        heading: location.coords.heading,
+        timestamp: location.timestamp,
       });
 
       const locationData = {
-        driverId: driverId,
-        latitude: location.latitude,
-        longitude: location.longitude,
-        speed: location.speed || 0,
-        heading: location.bearing || 0,
-        accuracy: location.accuracy || 0,
-        timestamp: new Date(),
-        localTime: new Date().toISOString(),
+        latitude: location.coords.latitude,
+        longitude: location.coords.longitude,
+        accuracy: location.coords.accuracy || 0,
+        speed: location.coords.speed || 0,
+        heading: location.coords.heading || 0,
+        timestamp: new Date(location.timestamp),
+        lastUpdate: new Date(),
+        isActive: true,
+        battery: location.battery ? {
+          level: location.battery.level,
+          is_charging: location.battery.is_charging,
+        } : null,
       };
 
-      // تحديث في driverLocations (للتتبع المباشر)
+      console.log('📤 Updating Firestore document:', `driverLocations/${driverId}`);
+      console.log('📤 Data:', locationData);
+
       await firestore()
         .collection('driverLocations')
         .doc(driverId)
-        .set(locationData);
+        .set(locationData, { merge: true });
 
-      console.log('✅ Location updated successfully in driverLocations');
-      ToastAndroid.show(`✅ تم تحديث الموقع (${driverId})`, ToastAndroid.SHORT);
-
-      // حفظ في سجل المواقع
-      await firestore()
-        .collection('locationHistory')
-        .add({
-          ...locationData,
-          timestamp: new Date(),
-        });
-
-      console.log('✅ Location saved to history');
-      console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+      console.log('✅ UPDATE_FIREBASE: Successfully updated!');
+      ToastAndroid.show('✅ تم حفظ الموقع بنجاح', ToastAndroid.SHORT);
+      console.log('═══════════════════════════════════════════════════════════════');
 
     } catch (error) {
-      console.error('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
-      console.error('❌ Error updating location in Firebase:', error);
+      console.error('═══════════════════════════════════════════════════════════════');
+      console.error('❌ UPDATE_FIREBASE: Error updating location!');
+      console.error('❌ Error details:', error);
       console.error('❌ Error message:', error.message);
       console.error('❌ Error code:', error.code);
-      console.error('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+      console.error('═══════════════════════════════════════════════════════════════');
       
       ToastAndroid.show(`❌ خطأ في حفظ الموقع: ${error.message}`, ToastAndroid.LONG);
     }
   }
 
-  static async checkStatus() {
-    return {
-      isRunning: this.isRunning,
-      driverId: this.driverId,
-    };
+  // تنظيف الموارد
+  async cleanup() {
+    try {
+      console.log('🔵 Cleaning up LocationService...');
+      
+      // إزالة جميع المستمعين
+      BackgroundGeolocation.removeListeners();
+      
+      console.log('✅ LocationService cleaned up');
+    } catch (error) {
+      console.error('❌ Error cleaning up LocationService:', error);
+    }
   }
 }
 
-export default LocationService;
+export default new LocationService();
 
