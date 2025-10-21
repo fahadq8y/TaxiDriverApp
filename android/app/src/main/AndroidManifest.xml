@@ -44,11 +44,24 @@
         </intent-filter>
       </activity>
       
-      <!-- خدمة الموقع في الخلفية -->
-      <service
-        android:name="com.asterinet.react.bgactions.RNBackgroundActionsTask"
+      <!-- خدمة الموقع في الخلفية (BackgroundGeolocation) -->
+      <service android:name="com.marianhello.bgloc.service.LocationServiceImpl"
+        android:enabled="true"
         android:exported="false"
         android:foregroundServiceType="location" />
+      
+      <service android:name="com.marianhello.bgloc.service.StreamingLocationServiceImpl"
+        android:enabled="true"
+        android:exported="false"
+        android:foregroundServiceType="location" />
+      
+      <receiver android:name="com.marianhello.bgloc.BootCompletedReceiver"
+        android:enabled="true"
+        android:exported="true">
+        <intent-filter>
+          <action android:name="android.intent.action.BOOT_COMPLETED" />
+        </intent-filter>
+      </receiver>
         
     </application>
 </manifest>
