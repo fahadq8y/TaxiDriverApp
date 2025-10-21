@@ -33,9 +33,6 @@ class LocationService {
 
       // تهيئة BackgroundGeolocation
       BackgroundGeolocation.ready({
-        // License Key
-        license: '6c61f89b598dabe110900e7926bccf8a3f916ebca075a4ee03350712f6d30e83',
-        
         // Geolocation Config
         desiredAccuracy: BackgroundGeolocation.DESIRED_ACCURACY_HIGH,
         distanceFilter: 10, // متر - يحدث الموقع كل 10 متر

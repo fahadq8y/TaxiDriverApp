@@ -29,6 +29,11 @@
       android:usesCleartextTraffic="${usesCleartextTraffic}"
       android:supportsRtl="true">
       
+      <!-- Transistor Background Geolocation License Key -->
+      <meta-data
+        android:name="com.transistorsoft.locationmanager.license"
+        android:value="6c61f89b598dabe110900e7926bccf8a3f916ebca075a4ee03350712f6d30e83" />
+      
       <!-- النشاط الرئيسي -->
       <activity
         android:name=".MainActivity"
@@ -44,24 +49,7 @@
         </intent-filter>
       </activity>
       
-      <!-- خدمة الموقع في الخلفية (BackgroundGeolocation) -->
-      <service android:name="com.marianhello.bgloc.service.LocationServiceImpl"
-        android:enabled="true"
-        android:exported="false"
-        android:foregroundServiceType="location" />
-      
-      <service android:name="com.marianhello.bgloc.service.StreamingLocationServiceImpl"
-        android:enabled="true"
-        android:exported="false"
-        android:foregroundServiceType="location" />
-      
-      <receiver android:name="com.marianhello.bgloc.BootCompletedReceiver"
-        android:enabled="true"
-        android:exported="true">
-        <intent-filter>
-          <action android:name="android.intent.action.BOOT_COMPLETED" />
-        </intent-filter>
-      </receiver>
+
         
     </application>
 </manifest>
