@@ -78,9 +78,9 @@ android {
     buildToolsVersion rootProject.ext.buildToolsVersion
     compileSdk rootProject.ext.compileSdkVersion
 
-    namespace "com.dp.taxidriver"
+    namespace "com.taxidriverapp"
     defaultConfig {
-        applicationId "com.dp.taxidriver"
+        applicationId "com.taxidriverapp"
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
         versionCode 1
