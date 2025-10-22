@@ -22,36 +22,9 @@ class LocationService {
         return granted;
       }
       
-      return true; // iOS handles permissions differently
-    } catch (error) {
-      console.error('[LocationService] Error checking permissions:', error);
-      return false;
-    }
-  }
-
-  async requestPermissions() {
-    try {
-      console.log('[LocationService] Requesting permissions...');
-      
-      if (Platform.OS === 'android') {
-        const granted = await PermissionsAndroid.request(
-          PermissionsAndroid.PERMISSIONS.ACCESS_FINE_LOCATION,
-          {
-            title: 'إذن الموقع',
-            message: 'التطبيق يحتاج إلى إذن الموقع لتتبع موقعك',
-            buttonNeutral: 'اسألني لاحقاً',
-            buttonNegative: 'إلغاء',
-            buttonPositive: 'موافق',
-          }
-        );
-        
-        console.log('[LocationService] Permission result:', granted);
-        return granted === PermissionsAndroid.RESULTS.GRANTED;
-      }
-      
       return true;
     } catch (error) {
-      console.error('[LocationService] Error requesting permissions:', error);
+      console.error('[LocationService] Error checking permissions:', error);
       return false;
     }
   }
@@ -65,37 +38,51 @@ class LocationService {
     try {
       console.log('[LocationService] Configuring BackgroundGeolocation...');
       
-      // Check permissions first
+      // Check permissions first (but don't request them)
       const hasPermission = await this.checkPermissions();
       if (!hasPermission) {
-        console.warn('[LocationService] No location permission, requesting...');
-        const granted = await this.requestPermissions();
-        if (!granted) {
-          console.error('[LocationService] Permission denied');
-          return false;
-        }
+        console.error('[LocationService] No location permission - user must enable manually');
+        return false;
       }
       
       // Configure BackgroundGeolocation with minimal settings
+      // Use setTimeout to delay configuration slightly
+      await new Promise(resolve => setTimeout(resolve, 500));
+      
       const state = await BackgroundGeolocation.ready({
         // Geolocation Config
         desiredAccuracy: BackgroundGeolocation.DESIRED_ACCURACY_HIGH,
         distanceFilter: 10,
         
         // Application config
-        debug: true, // Enable debug for troubleshooting
-        logLevel: BackgroundGeolocation.LOG_LEVEL_VERBOSE,
+        debug: false, // Disable debug to reduce overhead
+        logLevel: BackgroundGeolocation.LOG_LEVEL_ERROR,
         stopOnTerminate: false,
         startOnBoot: false,
         
-        // Disable foreground service temporarily to avoid notification issues
+        // Disable foreground service to avoid notification issues
         foregroundService: false,
         
-        // Disable headless mode temporarily
+        // Disable headless mode
         enableHeadless: false,
+        
+        // Disable all notifications and dialogs
+        notification: {
+          title: '',
+          text: '',
+        },
+        
+        // Don't show any permission rationale
+        locationAuthorizationRequest: 'Always',
+        backgroundPermissionRationale: {
+          title: '',
+          message: '',
+          positiveAction: '',
+          negativeAction: '',
+        },
       });
 
-      console.log('[LocationService] Configuration successful:', state);
+      console.log('[LocationService] Configuration successful');
       this.isConfigured = true;
       
       // Register location listener
@@ -104,7 +91,7 @@ class LocationService {
       return true;
     } catch (error) {
       console.error('[LocationService] Configuration error:', error);
-      console.error('[LocationService] Error stack:', error.stack);
+      console.error('[LocationService] Error message:', error.message);
       return false;
     }
   }
@@ -121,10 +108,10 @@ class LocationService {
       // Convert to string to ensure compatibility
       this.currentDriverId = String(driverId);
       
-      // Check permissions before starting
+      // Check permissions before starting (but don't request)
       const hasPermission = await this.checkPermissions();
       if (!hasPermission) {
-        console.error('[LocationService] No location permission');
+        console.error('[LocationService] No location permission - cannot start tracking');
         return false;
       }
       
@@ -137,6 +124,9 @@ class LocationService {
           return false;
         }
       }
+
+      // Add delay before starting
+      await new Promise(resolve => setTimeout(resolve, 1000));
 
       // Start tracking
       console.log('[LocationService] Calling BackgroundGeolocation.start()...');
@@ -151,7 +141,7 @@ class LocationService {
       return true;
     } catch (error) {
       console.error('[LocationService] Start error:', error);
-      console.error('[LocationService] Error stack:', error.stack);
+      console.error('[LocationService] Error message:', error.message);
       return false;
     }
   }
@@ -176,7 +166,7 @@ class LocationService {
 
   async onLocation(location) {
     try {
-      console.log('[LocationService] Location received:', location);
+      console.log('[LocationService] Location received:', location.coords);
       
       if (!this.currentDriverId) {
         console.warn('[LocationService] No driver ID set, skipping location save');
