@@ -1,3 +1,4 @@
+import {PermissionsAndroid, Platform} from 'react-native';
 import BackgroundGeolocation from 'react-native-background-geolocation';
 import firestore from '@react-native-firebase/firestore';
 
@@ -6,6 +7,53 @@ class LocationService {
     this.isConfigured = false;
     this.isTracking = false;
     this.currentDriverId = null;
+  }
+
+  async checkPermissions() {
+    try {
+      console.log('[LocationService] Checking permissions...');
+      
+      if (Platform.OS === 'android') {
+        const granted = await PermissionsAndroid.check(
+          PermissionsAndroid.PERMISSIONS.ACCESS_FINE_LOCATION
+        );
+        
+        console.log('[LocationService] Location permission granted:', granted);
+        return granted;
+      }
+      
+      return true; // iOS handles permissions differently
+    } catch (error) {
+      console.error('[LocationService] Error checking permissions:', error);
+      return false;
+    }
+  }
+
+  async requestPermissions() {
+    try {
+      console.log('[LocationService] Requesting permissions...');
+      
+      if (Platform.OS === 'android') {
+        const granted = await PermissionsAndroid.request(
+          PermissionsAndroid.PERMISSIONS.ACCESS_FINE_LOCATION,
+          {
+            title: 'إذن الموقع',
+            message: 'التطبيق يحتاج إلى إذن الموقع لتتبع موقعك',
+            buttonNeutral: 'اسألني لاحقاً',
+            buttonNegative: 'إلغاء',
+            buttonPositive: 'موافق',
+          }
+        );
+        
+        console.log('[LocationService] Permission result:', granted);
+        return granted === PermissionsAndroid.RESULTS.GRANTED;
+      }
+      
+      return true;
+    } catch (error) {
+      console.error('[LocationService] Error requesting permissions:', error);
+      return false;
+    }
   }
 
   async configure() {
@@ -17,38 +65,34 @@ class LocationService {
     try {
       console.log('[LocationService] Configuring BackgroundGeolocation...');
       
+      // Check permissions first
+      const hasPermission = await this.checkPermissions();
+      if (!hasPermission) {
+        console.warn('[LocationService] No location permission, requesting...');
+        const granted = await this.requestPermissions();
+        if (!granted) {
+          console.error('[LocationService] Permission denied');
+          return false;
+        }
+      }
+      
+      // Configure BackgroundGeolocation with minimal settings
       const state = await BackgroundGeolocation.ready({
         // Geolocation Config
         desiredAccuracy: BackgroundGeolocation.DESIRED_ACCURACY_HIGH,
         distanceFilter: 10,
-        stopTimeout: 5,
-        
-        // Activity Recognition
-        stopDetectionDelay: 1,
         
         // Application config
-        debug: false, // Set to true for debugging
+        debug: true, // Enable debug for troubleshooting
         logLevel: BackgroundGeolocation.LOG_LEVEL_VERBOSE,
         stopOnTerminate: false,
         startOnBoot: false,
         
-        // HTTP / SQLite config
-        autoSync: true,
-        maxDaysToPersist: 3,
+        // Disable foreground service temporarily to avoid notification issues
+        foregroundService: false,
         
-        // Notification config (for foreground service)
-        notification: {
-          title: "تتبع الموقع",
-          text: "التتبع نشط",
-        },
-        
-        // Android-specific
-        foregroundService: true,
-        enableHeadless: true,
-        
-        // iOS-specific (ignored on Android)
-        preventSuspend: true,
-        heartbeatInterval: 60,
+        // Disable headless mode temporarily
+        enableHeadless: false,
       });
 
       console.log('[LocationService] Configuration successful:', state);
@@ -60,6 +104,7 @@ class LocationService {
       return true;
     } catch (error) {
       console.error('[LocationService] Configuration error:', error);
+      console.error('[LocationService] Error stack:', error.stack);
       return false;
     }
   }
@@ -76,8 +121,16 @@ class LocationService {
       // Convert to string to ensure compatibility
       this.currentDriverId = String(driverId);
       
+      // Check permissions before starting
+      const hasPermission = await this.checkPermissions();
+      if (!hasPermission) {
+        console.error('[LocationService] No location permission');
+        return false;
+      }
+      
       // Configure if not already configured
       if (!this.isConfigured) {
+        console.log('[LocationService] Not configured, configuring now...');
         const configured = await this.configure();
         if (!configured) {
           console.error('[LocationService] Failed to configure');
@@ -98,6 +151,7 @@ class LocationService {
       return true;
     } catch (error) {
       console.error('[LocationService] Start error:', error);
+      console.error('[LocationService] Error stack:', error.stack);
       return false;
     }
   }
