@@ -42,13 +42,14 @@ const MainScreen = ({ navigation, route }) => {
   }, []);
 
   useEffect(() => {
-    // Start location tracking automatically after login
+    // DISABLED: Automatic location tracking to prevent crashes
+    // User must start tracking manually for now
     if (driverId && !locationServiceStarted) {
-      console.log('🟢 MAIN: Driver ID loaded, starting tracking automatically:', driverId);
-      // Start tracking in background without blocking UI
-      setTimeout(() => {
-        startLocationTracking(driverId);
-      }, 1000); // Wait 1 second to ensure UI is ready
+      console.log('🟡 MAIN: Driver ID loaded, but automatic tracking is DISABLED:', driverId);
+      console.log('🟡 MAIN: User must start tracking manually');
+      // setTimeout(() => {
+      //   startLocationTracking(driverId);
+      // }, 1000);
     }
   }, [driverId]);
 
