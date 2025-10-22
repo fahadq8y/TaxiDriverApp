@@ -77,19 +77,18 @@ const MainScreen = ({ navigation, route }) => {
       console.log('🔵 MAIN: Loading driver data from AsyncStorage...');
       const storedUserId = await AsyncStorage.getItem('userId');
       const storedDriverName = await AsyncStorage.getItem('userName');
-      const storedDriverId = await AsyncStorage.getItem('driverId');
+      const storedEmployeeNumber = await AsyncStorage.getItem('employeeNumber');
       
       console.log('🔵 MAIN: storedUserId:', storedUserId);
       console.log('🔵 MAIN: storedDriverName:', storedDriverName);
-      console.log('🔵 MAIN: storedDriverId:', storedDriverId);
+      console.log('🔵 MAIN: storedEmployeeNumber:', storedEmployeeNumber);
       
-      if (storedUserId) {
+      if (storedUserId && storedEmployeeNumber) {
         console.log('✅ MAIN: Setting state with stored data');
         setUserId(storedUserId);
-        const finalDriverId = storedDriverId || storedUserId;
-        console.log('🔵 MAIN: finalDriverId to set:', finalDriverId);
-        setDriverId(finalDriverId);
+        setDriverId(storedEmployeeNumber); // استخدام employeeNumber مباشرة
         setDriverName(storedDriverName || '');
+        console.log('🔵 MAIN: driverId set to employeeNumber:', storedEmployeeNumber);
       } else if (route.params?.driverId) {
         setDriverId(route.params.driverId);
         setUserId(route.params.driverId);
@@ -243,6 +242,7 @@ const MainScreen = ({ navigation, route }) => {
     );
   }
 
+  // driverId الآن يحتوي على employeeNumber (DRV001)
   const webViewUrl = `https://taxi-management-system-d8210.web.app/driver-view.html?driverId=${driverId}`;
 
   return (

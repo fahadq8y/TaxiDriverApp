@@ -68,16 +68,16 @@ const LoginScreen = ({ navigation }) => {
       // التأكد من وجود القيم المطلوبة
       const userId = userDoc.id || '';
       const userName = userData.name || '';
-      const driverIdToSave = userData.driverId || userData.employeeNumber || userDoc.id || '';
+      const employeeNumber = userData.driverId || userData.employeeNumber || '';
       
       console.log('🔵 LOGIN: Values to save:', {
         userId,
         userName,
-        driverIdToSave
+        employeeNumber
       });
       
       // التحقق من أن القيم ليست فارغة
-      if (!userId || !driverIdToSave) {
+      if (!userId || !employeeNumber) {
         console.error('❌ LOGIN: Missing required values!');
         Alert.alert('خطأ', 'بيانات المستخدم غير مكتملة. الرجاء التواصل مع الإدارة.');
         setLoading(false);
@@ -87,12 +87,12 @@ const LoginScreen = ({ navigation }) => {
       try {
         await AsyncStorage.setItem('userId', userId);
         await AsyncStorage.setItem('userName', userName);
+        await AsyncStorage.setItem('employeeNumber', employeeNumber); // حفظ الرقم الوظيفي
         await AsyncStorage.setItem('userRole', 'driver');
-        await AsyncStorage.setItem('driverId', driverIdToSave);
         
         // التحقق من الحفظ
-        const savedDriverId = await AsyncStorage.getItem('driverId');
-        console.log('✅ LOGIN: driverId saved successfully:', savedDriverId);
+        const savedEmployeeNumber = await AsyncStorage.getItem('employeeNumber');
+        console.log('✅ LOGIN: employeeNumber saved successfully:', savedEmployeeNumber);
 
         setLoading(false);
         navigation.replace('Main');
