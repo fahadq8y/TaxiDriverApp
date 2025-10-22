@@ -46,9 +46,10 @@ class LocationService {
       }
       
       // Configure BackgroundGeolocation with minimal settings
-      // Use setTimeout to delay configuration slightly
-      await new Promise(resolve => setTimeout(resolve, 500));
+      // Use setTimeout to delay configuration significantly
+      await new Promise(resolve => setTimeout(resolve, 3000));
       
+      console.log('[LocationService] Calling BackgroundGeolocation.ready()...');
       const state = await BackgroundGeolocation.ready({
         // Geolocation Config
         desiredAccuracy: BackgroundGeolocation.DESIRED_ACCURACY_HIGH,
@@ -83,15 +84,20 @@ class LocationService {
       });
 
       console.log('[LocationService] Configuration successful');
+      console.log('[LocationService] BackgroundGeolocation state:', JSON.stringify(state));
       this.isConfigured = true;
       
       // Register location listener
+      console.log('[LocationService] Registering location listeners...');
       BackgroundGeolocation.onLocation(this.onLocation.bind(this), this.onLocationError.bind(this));
+      console.log('[LocationService] Location listeners registered');
       
       return true;
     } catch (error) {
       console.error('[LocationService] Configuration error:', error);
       console.error('[LocationService] Error message:', error.message);
+      console.error('[LocationService] Error stack:', error.stack);
+      // Don't throw error, just log it and return false
       return false;
     }
   }
@@ -99,6 +105,7 @@ class LocationService {
   async start(driverId) {
     try {
       console.log('[LocationService] Starting tracking for driver:', driverId);
+      console.log('[LocationService] Will wait 5 seconds before initialization...');
       
       if (!driverId) {
         console.error('[LocationService] No driverId provided');
@@ -125,8 +132,8 @@ class LocationService {
         }
       }
 
-      // Add delay before starting
-      await new Promise(resolve => setTimeout(resolve, 1000));
+      // Add significant delay before starting
+      await new Promise(resolve => setTimeout(resolve, 5000));
 
       // Start tracking
       console.log('[LocationService] Calling BackgroundGeolocation.start()...');
@@ -142,6 +149,8 @@ class LocationService {
     } catch (error) {
       console.error('[LocationService] Start error:', error);
       console.error('[LocationService] Error message:', error.message);
+      console.error('[LocationService] Error stack:', error.stack);
+      // Don't throw error, just log it and return false to prevent app crash
       return false;
     }
   }

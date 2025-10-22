@@ -45,9 +45,10 @@ const MainScreen = ({ navigation, route }) => {
     // Start location tracking automatically after login
     if (driverId && !locationServiceStarted) {
       console.log('🟢 MAIN: Starting tracking with simplified service');
+      console.log('🟢 MAIN: Will wait 10 seconds before starting tracking...');
       setTimeout(() => {
         startLocationTracking(driverId);
-      }, 2000); // Wait 2 seconds for stability
+      }, 10000); // Wait 10 seconds for stability and to let WebView load
     }
   }, [driverId]);
 
