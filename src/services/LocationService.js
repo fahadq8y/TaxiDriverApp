@@ -1,11 +1,39 @@
 import BackgroundGeolocation from 'react-native-background-geolocation';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import firestore from '@react-native-firebase/firestore';
+import { PermissionsAndroid, Platform } from 'react-native';
 
 class LocationService {
   constructor() {
     this.isConfigured = false;
     this.currentDriverId = null;
+  }
+
+  // فحص الصلاحيات
+  async checkPermissions() {
+    try {
+      console.log('🔵 Checking location permissions...');
+      
+      if (Platform.OS === 'android') {
+        const fineLocation = await PermissionsAndroid.check(
+          PermissionsAndroid.PERMISSIONS.ACCESS_FINE_LOCATION
+        );
+        
+        const backgroundLocation = await PermissionsAndroid.check(
+          PermissionsAndroid.PERMISSIONS.ACCESS_BACKGROUND_LOCATION
+        );
+        
+        console.log('📍 Fine Location:', fineLocation);
+        console.log('📍 Background Location:', backgroundLocation);
+        
+        return fineLocation && backgroundLocation;
+      }
+      
+      return true;
+    } catch (error) {
+      console.error('❌ Error checking permissions:', error);
+      return false;
+    }
   }
 
   // تهيئة الخدمة
@@ -21,22 +49,26 @@ class LocationService {
 
       this.currentDriverId = driverId;
 
-      // تهيئة بسيطة جداً
-      await BackgroundGeolocation.ready({
+      // فحص الصلاحيات أولاً
+      const hasPermissions = await this.checkPermissions();
+      if (!hasPermissions) {
+        console.error('❌ Missing location permissions');
+        return false;
+      }
+
+      // تهيئة بسيطة جداً - بدون notification
+      const state = await BackgroundGeolocation.ready({
         desiredAccuracy: BackgroundGeolocation.DESIRED_ACCURACY_HIGH,
         distanceFilter: 10,
         stopOnTerminate: false,
-        startOnBoot: true,
+        startOnBoot: false, // تعطيل البدء التلقائي
         debug: false,
         logLevel: BackgroundGeolocation.LOG_LEVEL_VERBOSE,
-        foregroundService: true,
-        notification: {
-          title: 'تتبع الموقع',
-          text: 'التطبيق يعمل في الخلفية',
-        },
+        foregroundService: false, // تعطيل foreground service مؤقتاً
       });
 
       console.log('✅ BackgroundGeolocation configured');
+      console.log('📊 Initial state:', state);
       this.isConfigured = true;
 
       // الاستماع لتحديثات الموقع
@@ -53,6 +85,7 @@ class LocationService {
       return true;
     } catch (error) {
       console.error('❌ Error configuring LocationService:', error);
+      console.error('❌ Error message:', error.message);
       console.error('❌ Error stack:', error.stack);
       return false;
     }
@@ -75,6 +108,7 @@ class LocationService {
 
       // تهيئة إذا لم تكن مهيأة
       if (!this.isConfigured) {
+        console.log('🔵 Configuring before start...');
         const configured = await this.configure(driverId);
         if (!configured) {
           console.error('❌ Failed to configure');
@@ -82,13 +116,23 @@ class LocationService {
         }
       }
 
+      // فحص الحالة الحالية
+      const state = await BackgroundGeolocation.getState();
+      console.log('📊 Current state before start:', state);
+
       // بدء التتبع
+      console.log('🔵 Calling BackgroundGeolocation.start()...');
       await BackgroundGeolocation.start();
-      console.log('✅ Location tracking started');
+      console.log('✅ Location tracking started successfully');
+
+      // التحقق من الحالة بعد البدء
+      const newState = await BackgroundGeolocation.getState();
+      console.log('📊 State after start:', newState);
 
       return true;
     } catch (error) {
       console.error('❌ Error starting location tracking:', error);
+      console.error('❌ Error message:', error.message);
       console.error('❌ Error stack:', error.stack);
       return false;
     }
