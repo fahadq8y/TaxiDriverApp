@@ -147,6 +147,23 @@ class LocationService {
         console.log('[LocationService] Service stopped, will restart now');
       }
 
+      // Create/update driver document in drivers collection
+      console.log('[LocationService] Creating/updating driver document...');
+      try {
+        await firestore()
+          .collection('drivers')
+          .doc(this.currentDriverId)
+          .set({
+            driverId: this.currentDriverId,
+            isActive: true,
+            lastUpdate: firestore.FieldValue.serverTimestamp(),
+          }, { merge: true });
+        console.log('[LocationService] Driver document created/updated successfully');
+      } catch (docError) {
+        console.error('[LocationService] Error creating driver document:', docError);
+        // Continue anyway - the document might exist already
+      }
+
       // Start tracking
       console.log('[LocationService] Calling BackgroundGeolocation.start()...');
       await BackgroundGeolocation.start();
