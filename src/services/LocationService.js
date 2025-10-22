@@ -23,11 +23,11 @@ class LocationService {
       const userId = await AsyncStorage.getItem('userId');
 
       console.log('📍 Retrieved from AsyncStorage:', { driverId, userId });
-      ToastAndroid.show(`Driver ID: ${driverId || 'Not found'}`, ToastAndroid.LONG);
+      // ToastAndroid.show(`Driver ID: ${driverId || 'Not found'}`, ToastAndroid.LONG);
 
       if (!driverId) {
         console.error('❌ No driverId found in AsyncStorage');
-        ToastAndroid.show('❌ خطأ: لم يتم العثور على معرف السائق', ToastAndroid.LONG);
+        // ToastAndroid.show('❌ خطأ: لم يتم العثور على معرف السائق', ToastAndroid.LONG);
         return;
       }
 
@@ -61,8 +61,8 @@ class LocationService {
           text: 'التطبيق يعمل في الخلفية',
           color: '#4CAF50',
           channelName: 'Location Tracking',
-          smallIcon: 'drawable/ic_notification',
-          largeIcon: 'drawable/ic_launcher',
+          smallIcon: 'mipmap/ic_launcher',
+          largeIcon: 'mipmap/ic_launcher',
         },
         
         // iOS specific (للمستقبل)
@@ -76,12 +76,12 @@ class LocationService {
       // الاستماع لتحديثات الموقع
       BackgroundGeolocation.onLocation(async (location) => {
         console.log('📍 Location received:', location);
-        ToastAndroid.show(`📍 موقع جديد: ${location.coords.latitude.toFixed(4)}, ${location.coords.longitude.toFixed(4)}`, ToastAndroid.SHORT);
+        // ToastAndroid.show(`📍 موقع جديد: ${location.coords.latitude.toFixed(4)}, ${location.coords.longitude.toFixed(4)}`, ToastAndroid.SHORT);
         
         await this.updateLocationInFirebase(driverId, location);
       }, (error) => {
         console.error('❌ Location error:', error);
-        ToastAndroid.show(`❌ خطأ في الموقع: ${error}`, ToastAndroid.LONG);
+        // ToastAndroid.show(`❌ خطأ في الموقع: ${error}`, ToastAndroid.LONG);
       });
 
       // الاستماع لتغيرات الحركة
@@ -94,11 +94,13 @@ class LocationService {
         console.log('⚙️ Provider change:', provider);
         
         if (!provider.gps) {
-          ToastAndroid.show('⚠️ تحذير: GPS غير مفعل!', ToastAndroid.LONG);
+          console.warn('⚠️ GPS is not enabled');
+          // ToastAndroid.show('⚠️ تحذير: GPS غير مفعل!', ToastAndroid.LONG);
         }
         
         if (!provider.enabled) {
-          ToastAndroid.show('⚠️ تحذير: خدمة الموقع معطلة!', ToastAndroid.LONG);
+          console.warn('⚠️ Location service is disabled');
+          // ToastAndroid.show('⚠️ تحذير: خدمة الموقع معطلة!', ToastAndroid.LONG);
         }
       });
 
@@ -108,11 +110,12 @@ class LocationService {
       });
 
       console.log('✅ LocationService configured successfully');
-      ToastAndroid.show('✅ تم تفعيل خدمة التتبع بنجاح', ToastAndroid.LONG);
+      // ToastAndroid.show('✅ تم تفعيل خدمة التتبع بنجاح', ToastAndroid.LONG);
 
     } catch (error) {
       console.error('❌ Error configuring LocationService:', error);
-      ToastAndroid.show(`❌ خطأ في تفعيل الخدمة: ${error.message}`, ToastAndroid.LONG);
+      console.error('❌ Error stack:', error.stack);
+      // ToastAndroid.show(`❌ خطأ في تفعيل الخدمة: ${error.message}`, ToastAndroid.LONG);
     }
   }
 
@@ -170,12 +173,12 @@ class LocationService {
       await BackgroundGeolocation.stop();
       
       console.log('✅ Location tracking stopped');
-      ToastAndroid.show('✅ تم إيقاف التتبع', ToastAndroid.SHORT);
+      // ToastAndroid.show('✅ تم إيقاف التتبع', ToastAndroid.SHORT);
       
       return true;
     } catch (error) {
       console.error('❌ Error stopping location tracking:', error);
-      ToastAndroid.show(`❌ خطأ في إيقاف التتبع: ${error.message}`, ToastAndroid.LONG);
+      // ToastAndroid.show(`❌ خطأ في إيقاف التتبع: ${error.message}`, ToastAndroid.LONG);
       return false;
     }
   }
@@ -231,7 +234,7 @@ class LocationService {
         .set(locationData, { merge: true });
 
       console.log('✅ UPDATE_FIREBASE: Successfully updated!');
-      ToastAndroid.show('✅ تم حفظ الموقع بنجاح', ToastAndroid.SHORT);
+      // ToastAndroid.show('✅ تم حفظ الموقع بنجاح', ToastAndroid.SHORT);
       console.log('═══════════════════════════════════════════════════════════════');
 
     } catch (error) {
@@ -242,7 +245,7 @@ class LocationService {
       console.error('❌ Error code:', error.code);
       console.error('═══════════════════════════════════════════════════════════════');
       
-      ToastAndroid.show(`❌ خطأ في حفظ الموقع: ${error.message}`, ToastAndroid.LONG);
+      // ToastAndroid.show(`❌ خطأ في حفظ الموقع: ${error.message}`, ToastAndroid.LONG);
     }
   }
 
