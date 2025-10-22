@@ -45,9 +45,9 @@ class LocationService {
         return false;
       }
       
-      // Configure BackgroundGeolocation with minimal settings
-      // Use setTimeout to delay configuration significantly
-      await new Promise(resolve => setTimeout(resolve, 3000));
+      // Configure BackgroundGeolocation with proper settings
+      // Small delay to ensure system is ready
+      await new Promise(resolve => setTimeout(resolve, 1000));
       
       console.log('[LocationService] Calling BackgroundGeolocation.ready()...');
       const state = await BackgroundGeolocation.ready({
@@ -56,30 +56,33 @@ class LocationService {
         distanceFilter: 10,
         
         // Application config
-        debug: false, // Disable debug to reduce overhead
-        logLevel: BackgroundGeolocation.LOG_LEVEL_ERROR,
+        debug: true, // Enable debug to see errors
+        logLevel: BackgroundGeolocation.LOG_LEVEL_VERBOSE,
         stopOnTerminate: false,
         startOnBoot: false,
         
-        // Disable foreground service to avoid notification issues
-        foregroundService: false,
+        // IMPORTANT: foregroundService is REQUIRED for Android 8+
+        foregroundService: true,
         
         // Disable headless mode
         enableHeadless: false,
         
-        // Disable all notifications and dialogs
+        // REQUIRED notification for foreground service (Android 8+)
         notification: {
-          title: '',
-          text: '',
+          title: 'Taxi Driver',
+          text: 'Tracking your location',
+          channelName: 'Location Tracking',
+          priority: BackgroundGeolocation.NOTIFICATION_PRIORITY_LOW,
+          smallIcon: 'mipmap/ic_launcher',
         },
         
-        // Don't show any permission rationale
+        // Permission settings
         locationAuthorizationRequest: 'Always',
         backgroundPermissionRationale: {
-          title: '',
-          message: '',
-          positiveAction: '',
-          negativeAction: '',
+          title: 'Allow location access',
+          message: 'We need to track your location',
+          positiveAction: 'Change to "{backgroundPermissionOptionLabel}"',
+          negativeAction: 'Cancel',
         },
       });
 
@@ -105,7 +108,6 @@ class LocationService {
   async start(driverId) {
     try {
       console.log('[LocationService] Starting tracking for driver:', driverId);
-      console.log('[LocationService] Will wait 5 seconds before initialization...');
       
       if (!driverId) {
         console.error('[LocationService] No driverId provided');
@@ -132,8 +134,18 @@ class LocationService {
         }
       }
 
-      // Add significant delay before starting
-      await new Promise(resolve => setTimeout(resolve, 5000));
+      // Check current state before starting
+      console.log('[LocationService] Checking current state...');
+      const state = await BackgroundGeolocation.getState();
+      console.log('[LocationService] Current state:', JSON.stringify(state));
+      
+      // If already enabled, stop it first to avoid conflicts
+      if (state.enabled) {
+        console.log('[LocationService] Service already running, stopping first...');
+        await BackgroundGeolocation.stop();
+        await new Promise(resolve => setTimeout(resolve, 1000));
+        console.log('[LocationService] Service stopped, will restart now');
+      }
 
       // Start tracking
       console.log('[LocationService] Calling BackgroundGeolocation.start()...');

@@ -45,10 +45,30 @@ const MainScreen = ({ navigation, route }) => {
     // Start location tracking automatically after login
     if (driverId && !locationServiceStarted) {
       console.log('🟢 MAIN: Starting tracking with simplified service');
-      console.log('🟢 MAIN: Will wait 10 seconds before starting tracking...');
-      setTimeout(() => {
-        startLocationTracking(driverId);
-      }, 10000); // Wait 10 seconds for stability and to let WebView load
+      
+      const initTracking = async () => {
+        try {
+          // Wait for screen to fully render
+          await new Promise(resolve => setTimeout(resolve, 2000));
+          
+          // Check permissions before starting
+          const hasPermission = await PermissionsAndroid.check(
+            PermissionsAndroid.PERMISSIONS.ACCESS_FINE_LOCATION
+          );
+          
+          console.log('🟢 MAIN: Has location permission:', hasPermission);
+          
+          if (hasPermission) {
+            await startLocationTracking(driverId);
+          } else {
+            console.log('⚠️ MAIN: No location permission, user must enable manually');
+          }
+        } catch (error) {
+          console.error('❌ MAIN: Init tracking error:', error);
+        }
+      };
+      
+      initTracking();
     }
   }, [driverId]);
 
