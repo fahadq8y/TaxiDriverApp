@@ -243,7 +243,7 @@ const MainScreen = ({ navigation, route }) => {
     );
   }
 
-  const webViewUrl = `https://taxi-management-system-d8210.web.app/driver-view.html?driverId=${userId}`;
+  const webViewUrl = `https://taxi-management-system-d8210.web.app/driver-view.html?driverId=${driverId}`;
 
   return (
     <>
