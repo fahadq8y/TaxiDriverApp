@@ -1,4 +1,4 @@
-import BackgroundGeolocation from 'react-native-background-geolocation';
+// import BackgroundGeolocation from 'react-native-background-geolocation';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import firestore from '@react-native-firebase/firestore';
 import { PermissionsAndroid, Platform } from 'react-native';
@@ -52,35 +52,12 @@ class LocationService {
       // فحص الصلاحيات أولاً
       const hasPermissions = await this.checkPermissions();
       if (!hasPermissions) {
-        console.error('❌ Missing location permissions');
-        return false;
+        console.log('⚠️ Missing location permissions (but continuing)');
       }
 
-      // تهيئة بسيطة جداً - بدون notification
-      const state = await BackgroundGeolocation.ready({
-        desiredAccuracy: BackgroundGeolocation.DESIRED_ACCURACY_HIGH,
-        distanceFilter: 10,
-        stopOnTerminate: false,
-        startOnBoot: false, // تعطيل البدء التلقائي
-        debug: false,
-        logLevel: BackgroundGeolocation.LOG_LEVEL_VERBOSE,
-        foregroundService: false, // تعطيل foreground service مؤقتاً
-      });
-
-      console.log('✅ BackgroundGeolocation configured');
-      console.log('📊 Initial state:', state);
+      // ✅ DISABLED: BackgroundGeolocation.ready() to test
+      console.log('✅ LocationService configured (BackgroundGeolocation DISABLED for testing)');
       this.isConfigured = true;
-
-      // الاستماع لتحديثات الموقع
-      BackgroundGeolocation.onLocation(
-        (location) => {
-          console.log('📍 Location received:', location.coords);
-          this.updateLocationInFirebase(location);
-        },
-        (error) => {
-          console.error('❌ Location error:', error);
-        }
-      );
 
       return true;
     } catch (error) {
@@ -116,18 +93,10 @@ class LocationService {
         }
       }
 
-      // فحص الحالة الحالية
-      const state = await BackgroundGeolocation.getState();
-      console.log('📊 Current state before start:', state);
-
-      // بدء التتبع
-      console.log('🔵 Calling BackgroundGeolocation.start()...');
-      await BackgroundGeolocation.start();
-      console.log('✅ Location tracking started successfully');
-
-      // التحقق من الحالة بعد البدء
-      const newState = await BackgroundGeolocation.getState();
-      console.log('📊 State after start:', newState);
+      // ✅ DISABLED: BackgroundGeolocation.start() to test
+      console.log('✅ Location tracking started (BackgroundGeolocation DISABLED for testing)');
+      console.log('✅ If you see this message, the app did NOT crash!');
+      console.log('✅ This means the crash is caused by BackgroundGeolocation SDK');
 
       return true;
     } catch (error) {
@@ -142,8 +111,8 @@ class LocationService {
   async stop() {
     try {
       console.log('🔵 Stopping location tracking...');
-      await BackgroundGeolocation.stop();
-      console.log('✅ Location tracking stopped');
+      // ✅ DISABLED: BackgroundGeolocation.stop()
+      console.log('✅ Location tracking stopped (BackgroundGeolocation DISABLED)');
       return true;
     } catch (error) {
       console.error('❌ Error stopping location tracking:', error);
@@ -187,8 +156,8 @@ class LocationService {
   async cleanup() {
     try {
       console.log('🔵 Cleaning up LocationService...');
-      BackgroundGeolocation.removeListeners();
-      console.log('✅ LocationService cleaned up');
+      // ✅ DISABLED: BackgroundGeolocation.removeListeners()
+      console.log('✅ LocationService cleaned up (BackgroundGeolocation DISABLED)');
     } catch (error) {
       console.error('❌ Error cleaning up LocationService:', error);
     }
