@@ -19,6 +19,7 @@
     "@react-navigation/native-stack": "^7.3.28",
     "react": "19.1.1",
     "react-native": "0.82.0",
+    "react-native-background-fetch": "^4.2.8",
     "react-native-background-geolocation": "^4.19.0",
     "react-native-geolocation-service": "^5.3.1",
     "react-native-safe-area-context": "^5.6.1",

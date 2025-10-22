@@ -1,166 +1,202 @@
-// import BackgroundGeolocation from 'react-native-background-geolocation';
-import AsyncStorage from '@react-native-async-storage/async-storage';
+import BackgroundGeolocation from 'react-native-background-geolocation';
 import firestore from '@react-native-firebase/firestore';
-import { PermissionsAndroid, Platform } from 'react-native';
 
 class LocationService {
   constructor() {
     this.isConfigured = false;
+    this.isTracking = false;
     this.currentDriverId = null;
   }
 
-  // فحص الصلاحيات
-  async checkPermissions() {
-    try {
-      console.log('🔵 Checking location permissions...');
-      
-      if (Platform.OS === 'android') {
-        const fineLocation = await PermissionsAndroid.check(
-          PermissionsAndroid.PERMISSIONS.ACCESS_FINE_LOCATION
-        );
-        
-        const backgroundLocation = await PermissionsAndroid.check(
-          PermissionsAndroid.PERMISSIONS.ACCESS_BACKGROUND_LOCATION
-        );
-        
-        console.log('📍 Fine Location:', fineLocation);
-        console.log('📍 Background Location:', backgroundLocation);
-        
-        return fineLocation && backgroundLocation;
-      }
-      
-      return true;
-    } catch (error) {
-      console.error('❌ Error checking permissions:', error);
-      return false;
-    }
-  }
-
-  // تهيئة الخدمة
-  async configure(driverId) {
+  async configure() {
     if (this.isConfigured) {
-      console.log('🔵 LocationService already configured');
+      console.log('[LocationService] Already configured');
       return true;
     }
 
     try {
-      console.log('🔵 Configuring LocationService...');
-      console.log('🔵 Driver ID:', driverId);
+      console.log('[LocationService] Configuring BackgroundGeolocation...');
+      
+      const state = await BackgroundGeolocation.ready({
+        // Geolocation Config
+        desiredAccuracy: BackgroundGeolocation.DESIRED_ACCURACY_HIGH,
+        distanceFilter: 10,
+        stopTimeout: 5,
+        
+        // Activity Recognition
+        stopDetectionDelay: 1,
+        
+        // Application config
+        debug: false, // Set to true for debugging
+        logLevel: BackgroundGeolocation.LOG_LEVEL_VERBOSE,
+        stopOnTerminate: false,
+        startOnBoot: false,
+        
+        // HTTP / SQLite config
+        autoSync: true,
+        maxDaysToPersist: 3,
+        
+        // Notification config (for foreground service)
+        notification: {
+          title: "تتبع الموقع",
+          text: "التتبع نشط",
+        },
+        
+        // Android-specific
+        foregroundService: true,
+        enableHeadless: true,
+        
+        // iOS-specific (ignored on Android)
+        preventSuspend: true,
+        heartbeatInterval: 60,
+      });
 
-      this.currentDriverId = driverId;
-
-      // فحص الصلاحيات أولاً
-      const hasPermissions = await this.checkPermissions();
-      if (!hasPermissions) {
-        console.log('⚠️ Missing location permissions (but continuing)');
-      }
-
-      // ✅ DISABLED: BackgroundGeolocation.ready() to test
-      console.log('✅ LocationService configured (BackgroundGeolocation DISABLED for testing)');
+      console.log('[LocationService] Configuration successful:', state);
       this.isConfigured = true;
-
+      
+      // Register location listener
+      BackgroundGeolocation.onLocation(this.onLocation.bind(this), this.onLocationError.bind(this));
+      
       return true;
     } catch (error) {
-      console.error('❌ Error configuring LocationService:', error);
-      console.error('❌ Error message:', error.message);
-      console.error('❌ Error stack:', error.stack);
+      console.error('[LocationService] Configuration error:', error);
       return false;
     }
   }
 
-  // بدء التتبع
   async start(driverId) {
     try {
-      console.log('🚀 Starting location tracking...');
-      console.log('🚀 Driver ID:', driverId);
-
+      console.log('[LocationService] Starting tracking for driver:', driverId);
+      
       if (!driverId) {
-        console.error('❌ No driverId provided');
+        console.error('[LocationService] No driverId provided');
         return false;
       }
 
-      // حفظ driverId
-      await AsyncStorage.setItem('driverId', String(driverId));
-      this.currentDriverId = driverId;
-
-      // تهيئة إذا لم تكن مهيأة
+      // Convert to string to ensure compatibility
+      this.currentDriverId = String(driverId);
+      
+      // Configure if not already configured
       if (!this.isConfigured) {
-        console.log('🔵 Configuring before start...');
-        const configured = await this.configure(driverId);
+        const configured = await this.configure();
         if (!configured) {
-          console.error('❌ Failed to configure');
+          console.error('[LocationService] Failed to configure');
           return false;
         }
       }
 
-      // ✅ DISABLED: BackgroundGeolocation.start() to test
-      console.log('✅ Location tracking started (BackgroundGeolocation DISABLED for testing)');
-      console.log('✅ If you see this message, the app did NOT crash!');
-      console.log('✅ This means the crash is caused by BackgroundGeolocation SDK');
-
+      // Start tracking
+      console.log('[LocationService] Calling BackgroundGeolocation.start()...');
+      await BackgroundGeolocation.start();
+      
+      this.isTracking = true;
+      console.log('[LocationService] Tracking started successfully');
+      
+      // Update driver status in Firestore
+      await this.updateDriverStatus(true);
+      
       return true;
     } catch (error) {
-      console.error('❌ Error starting location tracking:', error);
-      console.error('❌ Error message:', error.message);
-      console.error('❌ Error stack:', error.stack);
+      console.error('[LocationService] Start error:', error);
       return false;
     }
   }
 
-  // إيقاف التتبع
   async stop() {
     try {
-      console.log('🔵 Stopping location tracking...');
-      // ✅ DISABLED: BackgroundGeolocation.stop()
-      console.log('✅ Location tracking stopped (BackgroundGeolocation DISABLED)');
+      console.log('[LocationService] Stopping tracking...');
+      
+      await BackgroundGeolocation.stop();
+      this.isTracking = false;
+      
+      // Update driver status in Firestore
+      await this.updateDriverStatus(false);
+      
+      console.log('[LocationService] Tracking stopped');
       return true;
     } catch (error) {
-      console.error('❌ Error stopping location tracking:', error);
+      console.error('[LocationService] Stop error:', error);
       return false;
     }
   }
 
-  // تحديث الموقع في Firestore
-  async updateLocationInFirebase(location) {
+  async onLocation(location) {
     try {
+      console.log('[LocationService] Location received:', location);
+      
       if (!this.currentDriverId) {
-        console.error('❌ No driverId available');
+        console.warn('[LocationService] No driver ID set, skipping location save');
         return;
       }
 
-      const locationData = {
-        latitude: location.coords.latitude,
-        longitude: location.coords.longitude,
-        accuracy: location.coords.accuracy || 0,
-        speed: location.coords.speed || 0,
-        heading: location.coords.heading || 0,
-        timestamp: new Date(location.timestamp),
-        lastUpdate: new Date(),
-        isActive: true,
-      };
-
-      console.log('📤 Updating Firebase:', this.currentDriverId);
-
+      // Save to Firestore
       await firestore()
-        .collection('driverLocations')
+        .collection('drivers')
         .doc(this.currentDriverId)
-        .set(locationData, { merge: true });
+        .update({
+          location: {
+            latitude: location.coords.latitude,
+            longitude: location.coords.longitude,
+            accuracy: location.coords.accuracy,
+            speed: location.coords.speed || 0,
+            heading: location.coords.heading || 0,
+          },
+          lastUpdate: firestore.FieldValue.serverTimestamp(),
+          isActive: true,
+        });
 
-      console.log('✅ Firebase updated successfully');
+      console.log('[LocationService] Location saved to Firestore');
     } catch (error) {
-      console.error('❌ Error updating Firebase:', error);
+      console.error('[LocationService] Error saving location:', error);
     }
   }
 
-  // تنظيف الموارد
-  async cleanup() {
+  onLocationError(error) {
+    console.error('[LocationService] Location error:', error);
+  }
+
+  async updateDriverStatus(isActive) {
     try {
-      console.log('🔵 Cleaning up LocationService...');
-      // ✅ DISABLED: BackgroundGeolocation.removeListeners()
-      console.log('✅ LocationService cleaned up (BackgroundGeolocation DISABLED)');
+      if (!this.currentDriverId) {
+        return;
+      }
+
+      await firestore()
+        .collection('drivers')
+        .doc(this.currentDriverId)
+        .update({
+          isActive: isActive,
+          lastUpdate: firestore.FieldValue.serverTimestamp(),
+        });
+
+      console.log('[LocationService] Driver status updated:', isActive);
     } catch (error) {
-      console.error('❌ Error cleaning up LocationService:', error);
+      console.error('[LocationService] Error updating driver status:', error);
     }
+  }
+
+  async getCurrentPosition() {
+    try {
+      const location = await BackgroundGeolocation.getCurrentPosition({
+        timeout: 30,
+        maximumAge: 5000,
+        desiredAccuracy: 10,
+        samples: 1,
+      });
+      
+      return location;
+    } catch (error) {
+      console.error('[LocationService] Error getting current position:', error);
+      return null;
+    }
+  }
+
+  getState() {
+    return {
+      isConfigured: this.isConfigured,
+      isTracking: this.isTracking,
+      currentDriverId: this.currentDriverId,
+    };
   }
 }
 
