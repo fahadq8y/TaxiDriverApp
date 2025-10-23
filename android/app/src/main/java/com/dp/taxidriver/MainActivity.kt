@@ -34,25 +34,29 @@ class MainActivity : ReactActivity() {
   }
 
   private fun createNotificationChannel() {
-    // Only create channel for Android 8.0+ (API 26+)
     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-      val channelId = "location_tracking_channel"
-      val channelName = "Location Tracking"
-      val channelDescription = "Notification channel for location tracking service"
-      val importance = NotificationManager.IMPORTANCE_LOW
-      
-      val channel = NotificationChannel(channelId, channelName, importance).apply {
-        description = channelDescription
-        // Don't make sound or vibration for this channel
-        setSound(null, null)
-        enableVibration(false)
-      }
-      
-      // Register the channel with the system
       val notificationManager = getSystemService(NotificationManager::class.java)
-      notificationManager?.createNotificationChannel(channel)
       
-      android.util.Log.d("MainActivity", "Notification channel created: $channelId")
+      // تحقق إذا كان الـ channel موجود بالفعل
+      val existingChannel = notificationManager?.getNotificationChannel("location_tracking_channel")
+      if (existingChannel == null) {
+        val channelId = "location_tracking_channel"
+        val channelName = "Location Tracking"
+        val channelDescription = "Notification channel for location tracking service"
+        val importance = NotificationManager.IMPORTANCE_LOW
+        
+        val channel = NotificationChannel(channelId, channelName, importance).apply {
+          description = channelDescription
+          setSound(null, null)
+          enableVibration(false)
+          setShowBadge(false)  // لا تظهر badge على الأيقونة
+        }
+        
+        notificationManager?.createNotificationChannel(channel)
+        android.util.Log.d("MainActivity", "Notification channel created: $channelId")
+      } else {
+        android.util.Log.d("MainActivity", "Notification channel already exists")
+      }
     }
   }
 }

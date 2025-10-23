@@ -45,6 +45,26 @@ class LocationService {
         return false;
       }
       
+      // Request notification permission for Android 13+ (API 33+)
+      if (Platform.OS === 'android' && Platform.Version >= 33) {
+        console.log('[LocationService] Requesting notification permission for Android 13+...');
+        try {
+          const notificationPermission = await PermissionsAndroid.request(
+            PermissionsAndroid.PERMISSIONS.POST_NOTIFICATIONS
+          );
+          
+          if (notificationPermission !== PermissionsAndroid.RESULTS.GRANTED) {
+            console.warn('[LocationService] Notification permission not granted - notifications may not work');
+            // يمكن المتابعة، لكن قد لا تعمل الإشعارات
+          } else {
+            console.log('[LocationService] Notification permission granted');
+          }
+        } catch (notifError) {
+          console.error('[LocationService] Error requesting notification permission:', notifError);
+          // المتابعة على أي حال
+        }
+      }
+      
       // Configure BackgroundGeolocation with proper settings
       // Small delay to ensure system is ready
       await new Promise(resolve => setTimeout(resolve, 1000));
