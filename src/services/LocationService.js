@@ -72,6 +72,7 @@ class LocationService {
           title: 'Taxi Driver',
           text: 'Tracking your location',
           channelName: 'Location Tracking',
+          channelId: 'location_tracking_channel',  // Required for Android 8+
           priority: BackgroundGeolocation.NOTIFICATION_PRIORITY_LOW,
           smallIcon: 'mipmap/ic_launcher',
         },
