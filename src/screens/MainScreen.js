@@ -11,6 +11,7 @@ import {
   Platform,
   Linking,
   NativeModules,
+  PermissionsAndroid,
 } from 'react-native';
 import { WebView } from 'react-native-webview';
 import AsyncStorage from '@react-native-async-storage/async-storage';
