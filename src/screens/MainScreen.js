@@ -212,9 +212,9 @@ const MainScreen = ({ navigation, route }) => {
       (function() {
         try {
           // Set driver data in sessionStorage (driver-view.html uses sessionStorage)
-          sessionStorage.setItem('driverId', '${userId}');
+          sessionStorage.setItem('driverId', '${driverId}');
           
-          console.log('Driver data injected successfully - driverId: ${userId}');
+          console.log('Driver data injected successfully - driverId: ${driverId}');
           
           // Reload the page to apply changes
           if (!window.location.href.includes('reload=1')) {
