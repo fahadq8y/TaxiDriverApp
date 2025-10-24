@@ -150,4 +150,18 @@ dependencies {
     }
 }
 
+// فرض استخدام الإصدارات المتوفرة لجميع مكتبات Google Play Services
+configurations.all {
+    resolutionStrategy.eachDependency { DependencyResolveDetails details ->
+        if (details.requested.group == 'com.google.android.gms') {
+            // فرض الإصدارات المتوفرة بدلاً من 21.0.1 غير الموجود
+            if (details.requested.name == 'play-services-basement' && details.requested.version == '21.0.1') {
+                details.useVersion '18.4.0'
+            }
+            if (details.requested.name == 'play-services-tasks' && details.requested.version == '21.0.1') {
+                details.useVersion '18.2.0'
+            }
+        }
+    }
+}
 
