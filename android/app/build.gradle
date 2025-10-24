@@ -137,8 +137,7 @@ dependencies {
     implementation("com.facebook.react:react-android")
     implementation(project(':react-native-background-geolocation'))
     
-    // ✅ Google Play Services - إصدارات متوافقة
-    implementation platform('com.google.android.gms:play-services-bom:21.0.1')
+    // ✅ Google Play Services - إصدارات مباشرة بدون BOM
     implementation 'com.google.android.gms:play-services-location:21.0.1'
     implementation 'com.google.android.gms:play-services-maps:18.1.0'
     implementation 'com.google.android.gms:play-services-base:18.2.0'
