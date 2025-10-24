@@ -127,9 +127,6 @@ repositories {
     maven {
         url "${project(':react-native-background-geolocation').projectDir}/libs"
     }
-    maven {
-        url 'https://maven.transistorsoft.com/releases/local'
-    }
 }
 
 dependencies {
