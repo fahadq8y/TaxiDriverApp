@@ -7,6 +7,8 @@ class LocationService {
     this.isConfigured = false;
     this.isTracking = false;
     this.currentDriverId = null;
+    this.lastHistorySaveTime = null;
+    this.lastHistorySaveLocation = null;
   }
 
   async checkPermissions() {
@@ -227,6 +229,50 @@ class LocationService {
     }
   }
 
+  // Check if we should save this location to history
+  shouldSaveToHistory(location) {
+    const now = Date.now();
+    const currentLat = location.coords.latitude;
+    const currentLng = location.coords.longitude;
+    
+    // Save if it's the first location
+    if (!this.lastHistorySaveTime || !this.lastHistorySaveLocation) {
+      return true;
+    }
+    
+    // Save if 1 minute has passed
+    const timeDiff = now - this.lastHistorySaveTime;
+    if (timeDiff >= 60000) { // 60 seconds
+      return true;
+    }
+    
+    // Save if moved more than 50 meters
+    const lastLat = this.lastHistorySaveLocation.latitude;
+    const lastLng = this.lastHistorySaveLocation.longitude;
+    const distance = this.calculateDistance(lastLat, lastLng, currentLat, currentLng);
+    if (distance >= 50) { // 50 meters
+      return true;
+    }
+    
+    return false;
+  }
+  
+  // Calculate distance between two coordinates in meters (Haversine formula)
+  calculateDistance(lat1, lon1, lat2, lon2) {
+    const R = 6371e3; // Earth radius in meters
+    const φ1 = lat1 * Math.PI / 180;
+    const φ2 = lat2 * Math.PI / 180;
+    const Δφ = (lat2 - lat1) * Math.PI / 180;
+    const Δλ = (lon2 - lon1) * Math.PI / 180;
+    
+    const a = Math.sin(Δφ/2) * Math.sin(Δφ/2) +
+              Math.cos(φ1) * Math.cos(φ2) *
+              Math.sin(Δλ/2) * Math.sin(Δλ/2);
+    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+    
+    return R * c; // Distance in meters
+  }
+
   async onLocation(location) {
     try {
       console.log('[LocationService] Location received:', location.coords);
@@ -253,6 +299,42 @@ class LocationService {
         });
 
       console.log('[LocationService] Location saved to Firestore');
+      
+      // Save to locationHistory if conditions are met
+      if (this.shouldSaveToHistory(location)) {
+        try {
+          // Calculate expiry date (2 months from now)
+          const expiryDate = new Date();
+          expiryDate.setMonth(expiryDate.getMonth() + 2);
+          
+          await firestore()
+            .collection('locationHistory')
+            .add({
+              driverId: this.currentDriverId,
+              latitude: location.coords.latitude,
+              longitude: location.coords.longitude,
+              accuracy: location.coords.accuracy || 0,
+              speed: location.coords.speed || 0,
+              heading: location.coords.heading || 0,
+              timestamp: new Date(),
+              expiryDate: expiryDate,
+              appState: 'active',
+              userId: this.currentDriverId,
+            });
+          
+          // Update last save time and location
+          this.lastHistorySaveTime = Date.now();
+          this.lastHistorySaveLocation = {
+            latitude: location.coords.latitude,
+            longitude: location.coords.longitude,
+          };
+          
+          console.log('[LocationService] Location saved to history');
+        } catch (historyError) {
+          console.error('[LocationService] Error saving to history:', historyError);
+          // Don't throw - just log the error
+        }
+      }
     } catch (error) {
       console.error('[LocationService] Error saving location:', error);
       // Don't throw - just log the error
