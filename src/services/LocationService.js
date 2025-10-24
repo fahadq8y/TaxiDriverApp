@@ -25,7 +25,7 @@ class LocationService {
       return true;
     } catch (error) {
       console.error('[LocationService] Error checking permissions:', error);
-      return false;
+      throw new Error(`فشل التحقق من الأذونات: ${error.message}`);
     }
   }
 
@@ -41,8 +41,9 @@ class LocationService {
       // Check permissions first (but don't request them)
       const hasPermission = await this.checkPermissions();
       if (!hasPermission) {
-        console.error('[LocationService] No location permission - user must enable manually');
-        return false;
+        const errorMsg = 'صلاحية الموقع غير ممنوحة. يجب منح الصلاحية من الإعدادات.';
+        console.error('[LocationService]', errorMsg);
+        throw new Error(errorMsg);
       }
       
       // Request notification permission for Android 13+ (API 33+)
@@ -121,8 +122,9 @@ class LocationService {
       console.error('[LocationService] Configuration error:', error);
       console.error('[LocationService] Error message:', error.message);
       console.error('[LocationService] Error stack:', error.stack);
-      // Don't throw error, just log it and return false
-      return false;
+      
+      // Throw error with Arabic message
+      throw new Error(`فشل إعداد خدمة التتبع: ${error.message || 'خطأ غير معروف'}`);
     }
   }
 
@@ -131,8 +133,9 @@ class LocationService {
       console.log('[LocationService] Starting tracking for driver:', driverId);
       
       if (!driverId) {
-        console.error('[LocationService] No driverId provided');
-        return false;
+        const errorMsg = 'معرف السائق مفقود';
+        console.error('[LocationService]', errorMsg);
+        throw new Error(errorMsg);
       }
 
       // Convert to string to ensure compatibility
@@ -141,18 +144,15 @@ class LocationService {
       // Check permissions before starting (but don't request)
       const hasPermission = await this.checkPermissions();
       if (!hasPermission) {
-        console.error('[LocationService] No location permission - cannot start tracking');
-        return false;
+        const errorMsg = 'صلاحية الموقع غير ممنوحة';
+        console.error('[LocationService]', errorMsg);
+        throw new Error(errorMsg);
       }
       
       // Configure if not already configured
       if (!this.isConfigured) {
         console.log('[LocationService] Not configured, configuring now...');
-        const configured = await this.configure();
-        if (!configured) {
-          console.error('[LocationService] Failed to configure');
-          return false;
-        }
+        await this.configure();
       }
 
       // Check current state before starting
@@ -170,6 +170,7 @@ class LocationService {
 
       // Create/update driver document in drivers collection
       console.log('[LocationService] Creating/updating driver document...');
+      Alert.alert('تتبع', `محاولة الكتابة إلى Firestore للسائق: ${this.currentDriverId}`);
       try {
         await firestore()
           .collection('drivers')
@@ -180,9 +181,11 @@ class LocationService {
             lastUpdate: firestore.FieldValue.serverTimestamp(),
           }, { merge: true });
         console.log('[LocationService] Driver document created/updated successfully');
+        Alert.alert('نجاح', 'تم الكتابة إلى Firestore بنجاح!');
       } catch (docError) {
         console.error('[LocationService] Error creating driver document:', docError);
-        // Continue anyway - the document might exist already
+        Alert.alert('خطأ Firestore', `فشل الكتابة: ${docError.message}`);
+        throw new Error(`فشل إنشاء سجل السائق في قاعدة البيانات: ${docError.message}`);
       }
 
       // Start tracking
@@ -200,8 +203,9 @@ class LocationService {
       console.error('[LocationService] Start error:', error);
       console.error('[LocationService] Error message:', error.message);
       console.error('[LocationService] Error stack:', error.stack);
-      // Don't throw error, just log it and return false to prevent app crash
-      return false;
+      
+      // Throw error to be caught by MainScreen
+      throw new Error(`فشل بدء التتبع: ${error.message || 'خطأ غير معروف'}`);
     }
   }
 
@@ -219,7 +223,7 @@ class LocationService {
       return true;
     } catch (error) {
       console.error('[LocationService] Stop error:', error);
-      return false;
+      throw new Error(`فشل إيقاف التتبع: ${error.message || 'خطأ غير معروف'}`);
     }
   }
 
@@ -251,6 +255,7 @@ class LocationService {
       console.log('[LocationService] Location saved to Firestore');
     } catch (error) {
       console.error('[LocationService] Error saving location:', error);
+      // Don't throw - just log the error
     }
   }
 
@@ -275,11 +280,26 @@ class LocationService {
       console.log('[LocationService] Driver status updated:', isActive);
     } catch (error) {
       console.error('[LocationService] Error updating driver status:', error);
+      // Don't throw - just log the error
     }
   }
 
   async getCurrentPosition() {
     try {
+      console.log('[LocationService] Getting current position...');
+      
+      // Check permissions first
+      const hasPermission = await this.checkPermissions();
+      if (!hasPermission) {
+        throw new Error('صلاحية الموقع غير ممنوحة');
+      }
+      
+      // Configure if not already configured
+      if (!this.isConfigured) {
+        console.log('[LocationService] Not configured, configuring now...');
+        await this.configure();
+      }
+      
       const location = await BackgroundGeolocation.getCurrentPosition({
         timeout: 30,
         maximumAge: 5000,
@@ -287,10 +307,11 @@ class LocationService {
         samples: 1,
       });
       
+      console.log('[LocationService] Current position:', location.coords);
       return location;
     } catch (error) {
       console.error('[LocationService] Error getting current position:', error);
-      return null;
+      throw new Error(`فشل الحصول على الموقع الحالي: ${error.message || 'خطأ غير معروف'}`);
     }
   }
 
