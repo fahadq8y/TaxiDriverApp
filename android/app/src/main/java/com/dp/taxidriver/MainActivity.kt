@@ -2,8 +2,10 @@ package com.dp.taxidriver
 
 import android.app.NotificationChannel
 import android.app.NotificationManager
+import android.content.Context
 import android.os.Build
 import android.os.Bundle
+import android.util.Log
 import com.facebook.react.ReactActivity
 import com.facebook.react.ReactActivityDelegate
 import com.facebook.react.defaults.DefaultNewArchitectureEntryPoint.fabricEnabled
@@ -25,37 +27,57 @@ class MainActivity : ReactActivity() {
       DefaultReactActivityDelegate(this, mainComponentName, fabricEnabled)
 
   /**
-   * Create notification channel for Android 8.0+ (API 26+)
-   * This is REQUIRED for Foreground Service to work properly
+   * Create notification channels for Android 8.0+ (API 26+)
+   * This is REQUIRED for Foreground Service to work properly on Android 14/15
    */
   override fun onCreate(savedInstanceState: Bundle?) {
     super.onCreate(savedInstanceState)
-    createNotificationChannel()
+    createNotificationChannels()
   }
 
-  private fun createNotificationChannel() {
+  private fun createNotificationChannels() {
     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-      val notificationManager = getSystemService(NotificationManager::class.java)
+      val notificationManager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
       
-      // تحقق إذا كان الـ channel موجود بالفعل
-      val existingChannel = notificationManager?.getNotificationChannel("location_tracking_channel")
-      if (existingChannel == null) {
-        val channelId = "location_tracking_channel"
-        val channelName = "Location Tracking"
-        val channelDescription = "Notification channel for location tracking service"
-        val importance = NotificationManager.IMPORTANCE_LOW
-        
-        val channel = NotificationChannel(channelId, channelName, importance).apply {
-          description = channelDescription
-          setSound(null, null)
+      // Check if location tracking channel already exists
+      val existingLocationChannel = notificationManager.getNotificationChannel("location_tracking_channel")
+      if (existingLocationChannel == null) {
+        // ✅ Channel for Transistor Background Geolocation
+        // Using the same Channel ID as in LocationService.js
+        val locationChannel = NotificationChannel(
+          "location_tracking_channel", // ✅ Matches LocationService.js
+          "Background Location Service",
+          NotificationManager.IMPORTANCE_LOW
+        ).apply {
+          description = "Shows when the app is tracking your location in the background"
+          setShowBadge(false)
           enableVibration(false)
-          setShowBadge(false)  // لا تظهر badge على الأيقونة
+          setSound(null, null)
         }
         
-        notificationManager?.createNotificationChannel(channel)
-        android.util.Log.d("MainActivity", "Notification channel created: $channelId")
+        notificationManager.createNotificationChannel(locationChannel)
+        Log.d("MainActivity", "Notification channel created: location_tracking_channel")
       } else {
-        android.util.Log.d("MainActivity", "Notification channel already exists")
+        Log.d("MainActivity", "Notification channel already exists: location_tracking_channel")
+      }
+      
+      // Check if app channel already exists
+      val existingAppChannel = notificationManager.getNotificationChannel("TaxiDriverApp")
+      if (existingAppChannel == null) {
+        // Channel for general app notifications
+        val appChannel = NotificationChannel(
+          "TaxiDriverApp",
+          "TaxiDriverApp Notifications", 
+          NotificationManager.IMPORTANCE_DEFAULT
+        ).apply {
+          description = "General app notifications"
+          enableVibration(true)
+        }
+        
+        notificationManager.createNotificationChannel(appChannel)
+        Log.d("MainActivity", "Notification channel created: TaxiDriverApp")
+      } else {
+        Log.d("MainActivity", "Notification channel already exists: TaxiDriverApp")
       }
     }
   }

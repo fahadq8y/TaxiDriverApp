@@ -1,56 +1,121 @@
-<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools">
 
-    <!-- صلاحيات الإنترنت -->
+    <!-- ===== BASIC PERMISSIONS ===== -->
     <uses-permission android:name="android.permission.INTERNET" />
-    
-    <!-- صلاحيات الموقع -->
-    <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+    <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />
+    <uses-permission android:name="android.permission.VIBRATE" />
+    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
+    <uses-permission android:name="android.permission.WAKE_LOCK" />
+
+    <!-- ===== LOCATION PERMISSIONS ===== -->
     <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
+    <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
     <uses-permission android:name="android.permission.ACCESS_BACKGROUND_LOCATION" />
-    
-    <!-- صلاحيات الخدمة في الخلفية -->
+
+    <!-- ===== ANDROID 14/15 FOREGROUND SERVICE PERMISSIONS ===== -->
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_LOCATION" />
-    <uses-permission android:name="android.permission.WAKE_LOCK" />
     
-    <!-- صلاحيات إضافية للعمل في الخلفية -->
-    <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
+    <!-- ===== ANDROID 14+ EXACT ALARM PERMISSION ===== -->
+    <uses-permission android:minSdkVersion="34" android:name="android.permission.USE_EXACT_ALARM" />
     
-    <!-- صلاحية الإشعارات (Android 13+) -->
+    <!-- ===== ANDROID 13+ NOTIFICATION PERMISSION ===== -->
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    
+    <!-- ===== BATTERY OPTIMIZATION PERMISSION ===== -->
+    <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
 
     <application
-      android:name=".MainApplication"
-      android:label="@string/app_name"
-      android:icon="@mipmap/ic_launcher"
-      android:roundIcon="@mipmap/ic_launcher_round"
-      android:allowBackup="false"
-      android:theme="@style/AppTheme"
-      android:usesCleartextTraffic="${usesCleartextTraffic}"
-      android:supportsRtl="true">
-      
-      <!-- Transistor Background Geolocation License Key -->
-      <meta-data
-        android:name="com.transistorsoft.locationmanager.license"
-        android:value="6c61f89b598dabe110900e7926bccf8a3f916ebca075a4ee03350712f6d30e83" />
-      
-      <!-- النشاط الرئيسي -->
-      <activity
-        android:name=".MainActivity"
+        android:name=".MainApplication"
+        android:allowBackup="false"
+        android:theme="@style/AppTheme"
+        android:icon="@mipmap/ic_launcher"
+        android:roundIcon="@mipmap/ic_launcher_round"
         android:label="@string/app_name"
-        android:configChanges="keyboard|keyboardHidden|orientation|screenLayout|screenSize|smallestScreenSize|uiMode"
-        android:launchMode="singleTask"
-        android:windowSoftInputMode="adjustResize"
-        android:screenOrientation="portrait"
-        android:exported="true">
-        <intent-filter>
-            <action android:name="android.intent.action.MAIN" />
-            <category android:name="android.intent.category.LAUNCHER" />
-        </intent-filter>
-      </activity>
-      
+        android:usesCleartextTraffic="${usesCleartextTraffic}"
+        android:supportsRtl="true">
 
-        
+        <!-- ===== TRANSISTOR BACKGROUND GEOLOCATION LICENSE ===== -->
+        <meta-data
+            android:name="com.transistorsoft.locationmanager.license"
+            android:value="6c61f89b598dabe110900e7926bccf8a3f916ebca075a4ee03350712f6d30e83" />
+
+        <!-- ===== MAIN ACTIVITY ===== -->
+        <activity
+            android:name=".MainActivity"
+            android:exported="true"
+            android:launchMode="singleTask"
+            android:theme="@style/AppTheme"
+            android:configChanges="keyboard|keyboardHidden|orientation|screenLayout|screenSize|smallestScreenSize|uiMode"
+            android:windowSoftInputMode="adjustResize"
+            android:screenOrientation="portrait">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity>
+
+        <!-- ===== TRANSISTOR BACKGROUND GEOLOCATION SERVICES ===== -->
+        <!-- TrackingService - Primary location tracking service -->
+        <service 
+            android:name="com.transistorsoft.locationmanager.service.TrackingService"
+            android:foregroundServiceType="location"
+            android:enabled="true"
+            android:exported="false"
+            tools:replace="android:foregroundServiceType" />
+
+        <!-- ActivityRecognitionService - Motion detection service -->
+        <service 
+            android:name="com.transistorsoft.locationmanager.service.ActivityRecognitionService"
+            android:foregroundServiceType="location"
+            android:enabled="true"
+            android:exported="false"
+            tools:replace="android:foregroundServiceType" />
+
+        <!-- LocationRequestService - Location request handling service -->
+        <service 
+            android:name="com.transistorsoft.locationmanager.service.LocationRequestService"
+            android:foregroundServiceType="location"
+            android:enabled="true"
+            android:exported="false"
+            tools:replace="android:foregroundServiceType" />
+
+        <!-- HeartbeatService - Periodic heartbeat service -->
+        <service 
+            android:name="com.transistorsoft.locationmanager.service.HeartbeatService"
+            android:foregroundServiceType="location"
+            android:enabled="true"
+            android:exported="false"
+            tools:replace="android:foregroundServiceType" />
+
+        <!-- ===== REACT NATIVE HEADLESS JS SERVICE ===== -->
+        <service 
+            android:name="com.transistorsoft.rnbackgroundgeolocation.HeadlessTask"
+            android:foregroundServiceType="location"
+            android:enabled="true"
+            android:exported="false" />
+
+        <!-- ===== BROADCAST RECEIVERS WITH EXPLICIT EXPORT SETTINGS ===== -->
+        <receiver 
+            android:name="com.transistorsoft.locationmanager.DeviceSettingsReceiver"
+            android:enabled="true"
+            android:exported="false" />
+
+        <receiver 
+            android:name="com.transistorsoft.locationmanager.BootReceiver"
+            android:enabled="true"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.intent.action.BOOT_COMPLETED" />
+                <action android:name="android.intent.action.MY_PACKAGE_REPLACED" />
+                <action android:name="android.intent.action.PACKAGE_REPLACED" />
+                <data android:scheme="package" />
+            </intent-filter>
+        </receiver>
+
     </application>
 </manifest>
 
