@@ -35,6 +35,13 @@ allprojects {
         maven { url("${project(':react-native-background-fetch').projectDir}/libs") }
     }
     
-
+    // ✅ Dependency Substitution: استبدال الإصدارات غير الموجودة قبل البحث
+    configurations.all {
+        resolutionStrategy.dependencySubstitution {
+            // استبدال 21.0.1 (غير موجود) بـ 18.4.0 (موجود)
+            substitute module('com.google.android.gms:play-services-basement:21.0.1') using module('com.google.android.gms:play-services-basement:18.4.0')
+            substitute module('com.google.android.gms:play-services-tasks:21.0.1') using module('com.google.android.gms:play-services-tasks:18.2.0')
+        }
+    }
 }
 
