@@ -59,62 +59,41 @@
         </activity>
 
         <!-- ===== TRANSISTOR BACKGROUND GEOLOCATION SERVICES ===== -->
+        <!-- NOTE: Only adding foregroundServiceType to existing services -->
+        <!-- The services themselves are already defined in the Transistor library -->
+        
         <!-- TrackingService - Primary location tracking service -->
         <service 
             android:name="com.transistorsoft.locationmanager.service.TrackingService"
             android:foregroundServiceType="location"
-            android:enabled="true"
-            android:exported="false"
             tools:replace="android:foregroundServiceType" />
 
         <!-- ActivityRecognitionService - Motion detection service -->
         <service 
             android:name="com.transistorsoft.locationmanager.service.ActivityRecognitionService"
             android:foregroundServiceType="location"
-            android:enabled="true"
-            android:exported="false"
             tools:replace="android:foregroundServiceType" />
 
         <!-- LocationRequestService - Location request handling service -->
         <service 
             android:name="com.transistorsoft.locationmanager.service.LocationRequestService"
             android:foregroundServiceType="location"
-            android:enabled="true"
-            android:exported="false"
             tools:replace="android:foregroundServiceType" />
 
         <!-- HeartbeatService - Periodic heartbeat service -->
         <service 
             android:name="com.transistorsoft.locationmanager.service.HeartbeatService"
             android:foregroundServiceType="location"
-            android:enabled="true"
-            android:exported="false"
             tools:replace="android:foregroundServiceType" />
 
         <!-- ===== REACT NATIVE HEADLESS JS SERVICE ===== -->
         <service 
             android:name="com.transistorsoft.rnbackgroundgeolocation.HeadlessTask"
             android:foregroundServiceType="location"
-            android:enabled="true"
-            android:exported="false" />
+            tools:replace="android:foregroundServiceType" />
 
-        <!-- ===== BROADCAST RECEIVERS WITH EXPLICIT EXPORT SETTINGS ===== -->
-        <receiver 
-            android:name="com.transistorsoft.locationmanager.DeviceSettingsReceiver"
-            android:enabled="true"
-            android:exported="false" />
-
-        <receiver 
-            android:name="com.transistorsoft.locationmanager.BootReceiver"
-            android:enabled="true"
-            android:exported="true">
-            <intent-filter>
-                <action android:name="android.intent.action.BOOT_COMPLETED" />
-                <action android:name="android.intent.action.MY_PACKAGE_REPLACED" />
-                <action android:name="android.intent.action.PACKAGE_REPLACED" />
-                <data android:scheme="package" />
-            </intent-filter>
-        </receiver>
+        <!-- NOTE: Broadcast receivers are already defined in Transistor library -->
+        <!-- No need to redefine them here to avoid manifest merger conflicts -->
 
     </application>
 </manifest>
