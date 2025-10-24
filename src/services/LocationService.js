@@ -1,4 +1,4 @@
-import {PermissionsAndroid, Platform} from 'react-native';
+import { Alert, Platform, PermissionsAndroid } from 'react-native';
 import BackgroundGeolocation from 'react-native-background-geolocation';
 import firestore from '@react-native-firebase/firestore';
 
