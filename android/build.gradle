@@ -35,22 +35,6 @@ allprojects {
         maven { url("${project(':react-native-background-fetch').projectDir}/libs") }
     }
     
-    configurations.all {
-        resolutionStrategy {
-            // فرض استخدام إصدارات محددة لتجنب التضارب
-            force 'com.google.android.gms:play-services-location:21.0.1'
-            force 'com.google.android.gms:play-services-maps:18.1.0'
-            force 'com.google.android.gms:play-services-base:18.2.0'
-            
-            // منع استخدام إصدارات قديمة
-            eachDependency { DependencyResolveDetails details ->
-                if (details.requested.group == 'com.google.android.gms') {
-                    if (details.requested.version && details.requested.version < '18.0.0') {
-                        details.useVersion '21.0.1'
-                    }
-                }
-            }
-        }
-    }
+
 }
 
