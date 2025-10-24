@@ -39,14 +39,6 @@ allprojects {
         maven { url("${project(':react-native-background-geolocation').projectDir}/libs") }
         // Required for react-native-background-fetch
         maven { url("${project(':react-native-background-fetch').projectDir}/libs") }
-        // Transistor Software Maven repository (آخر أولوية)
-        maven {
-            url 'https://maven.transistorsoft.com/releases/local'
-            content {
-                // فقط مكتبات Transistor من هذا المستودع
-                includeGroup "com.transistorsoft"
-            }
-        }
     }
     
     configurations.all {
