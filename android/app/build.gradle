@@ -134,13 +134,8 @@ dependencies {
     implementation("com.facebook.react:react-android")
     implementation(project(':react-native-background-geolocation'))
     
-    // ✅ Google Play Services - إصدارات متوافقة صدرت في نفس الفترة (مايو 2024)
-    // تم اختيار هذه الإصدارات بناءً على التحقق من Maven Repository
-    implementation 'com.google.android.gms:play-services-location:21.3.0'    // May 29, 2024
-    implementation 'com.google.android.gms:play-services-maps:18.2.0'        // Oct 18, 2023
-    implementation 'com.google.android.gms:play-services-base:18.5.0'        // May 29, 2024
-    implementation 'com.google.android.gms:play-services-basement:18.4.0'    // May 29, 2024
-    implementation 'com.google.android.gms:play-services-tasks:18.2.0'       // May 29, 2024
+    // Google Play Services - managed by playServicesLocationVersion in android/build.gradle
+    implementation 'com.google.android.gms:play-services-maps:18.2.0'
 
     if (hermesEnabled.toBoolean()) {
         implementation("com.facebook.react:hermes-android")
