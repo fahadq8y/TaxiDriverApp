@@ -82,7 +82,8 @@
         <service 
             android:name="com.transistorsoft.locationmanager.service.ActivityRecognitionService"
             android:foregroundServiceType="location"
-            android:exported="false" />
+            android:exported="false"
+            tools:replace="android:foregroundServiceType" />
 
         <!-- LocationRequestService - Location request handling service -->
         <service 
@@ -101,6 +102,13 @@
             android:name="com.transistorsoft.rnbackgroundgeolocation.HeadlessTask"
             android:foregroundServiceType="location"
             android:exported="false" />
+
+        <!-- ScheduleService - Override to fix Android 16 compatibility -->
+        <service 
+            android:name="com.transistorsoft.locationmanager.scheduler.ScheduleService"
+            android:foregroundServiceType="shortService"
+            android:exported="false"
+            tools:replace="android:foregroundServiceType" />
 
         <!-- NOTE: Broadcast receivers are already defined in Transistor library -->
         <!-- No need to redefine them here to avoid manifest merger conflicts -->
