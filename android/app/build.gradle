@@ -135,9 +135,9 @@ dependencies {
     implementation(project(':react-native-background-geolocation'))
     
     // ✅ Google Play Services - إصدارات مباشرة بدون BOM
-    implementation 'com.google.android.gms:play-services-location:21.0.1'
-    implementation 'com.google.android.gms:play-services-maps:18.1.0'
-    implementation 'com.google.android.gms:play-services-base:18.2.0'
+    implementation 'com.google.android.gms:play-services-location:21.3.0'
+    implementation 'com.google.android.gms:play-services-maps:19.0.0'
+    implementation 'com.google.android.gms:play-services-base:18.5.0'
 
     if (hermesEnabled.toBoolean()) {
         implementation("com.facebook.react:hermes-android")
@@ -150,11 +150,9 @@ dependencies {
 configurations.all {
     resolutionStrategy.eachDependency { DependencyResolveDetails details ->
         if (details.requested.group == 'com.google.android.gms') {
-            if (details.requested.name == 'play-services-location') {
-                details.useVersion '21.0.1'
-            }
-            if (details.requested.name == 'play-services-maps') {
-                details.useVersion '18.1.0'
+            // فرض استخدام إصدار 18.4.0 لجميع مكتبات play-services
+            if (details.requested.name.startsWith('play-services-')) {
+                details.useVersion '18.4.0'
             }
         }
     }
