@@ -176,6 +176,9 @@ Fields:
 
 **Commit:** `f649d6d`
 
+**تحديث:** تم استبدال `serverTimestamp()` بـ `new Date()` مؤقتاً بسبب مشكلة توافق مع الإصدار 23 من React Native Firebase
+**Commit البديل:** `830d783`
+
 ---
 
 ## ❌ المشاكل المعروفة
