@@ -138,6 +138,10 @@ dependencies {
     implementation 'com.google.android.gms:play-services-location:21.3.0'
     implementation 'com.google.android.gms:play-services-maps:19.0.0'
     implementation 'com.google.android.gms:play-services-base:18.5.0'
+    
+    // تحديد إصدارات مباشرة للمكتبات الفرعية
+    implementation 'com.google.android.gms:play-services-basement:18.4.0'
+    implementation 'com.google.android.gms:play-services-tasks:18.2.0'
 
     if (hermesEnabled.toBoolean()) {
         implementation("com.facebook.react:hermes-android")
@@ -146,14 +150,4 @@ dependencies {
     }
 }
 
-// تأكد من استخدام إصدار موحد
-configurations.all {
-    resolutionStrategy.eachDependency { DependencyResolveDetails details ->
-        if (details.requested.group == 'com.google.android.gms') {
-            // فرض استخدام إصدار 18.4.0 لجميع مكتبات play-services
-            if (details.requested.name.startsWith('play-services-')) {
-                details.useVersion '18.4.0'
-            }
-        }
-    }
-}
+
