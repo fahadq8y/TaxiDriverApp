@@ -178,7 +178,7 @@ class LocationService {
           .set({
             driverId: this.currentDriverId,
             isActive: true,
-            lastUpdate: firestore.FieldValue.serverTimestamp(),
+            lastUpdate: firestore().FieldValue.serverTimestamp(),
           }, { merge: true });
         console.log('[LocationService] Driver document created/updated successfully');
         Alert.alert('نجاح', 'تم الكتابة إلى Firestore بنجاح!');
@@ -248,7 +248,7 @@ class LocationService {
             speed: location.coords.speed || 0,
             heading: location.coords.heading || 0,
           },
-          lastUpdate: firestore.FieldValue.serverTimestamp(),
+          lastUpdate: firestore().FieldValue.serverTimestamp(),
           isActive: true,
         });
 
@@ -274,7 +274,7 @@ class LocationService {
         .doc(this.currentDriverId)
         .update({
           isActive: isActive,
-          lastUpdate: firestore.FieldValue.serverTimestamp(),
+          lastUpdate: firestore().FieldValue.serverTimestamp(),
         });
 
       console.log('[LocationService] Driver status updated:', isActive);
