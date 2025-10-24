@@ -134,14 +134,12 @@ dependencies {
     implementation("com.facebook.react:react-android")
     implementation(project(':react-native-background-geolocation'))
     
-    // ✅ Google Play Services - إصدارات مباشرة بدون BOM
-    implementation 'com.google.android.gms:play-services-location:21.3.0'
-    implementation 'com.google.android.gms:play-services-maps:19.0.0'
-    implementation 'com.google.android.gms:play-services-base:18.5.0'
-    
-    // تحديد إصدارات مباشرة للمكتبات الفرعية
+    // ✅ Google Play Services - جميع الإصدارات موحدة إلى 18.4.0 لتجنب IncompatibleClassChangeError
+    implementation 'com.google.android.gms:play-services-location:18.4.0'
+    implementation 'com.google.android.gms:play-services-maps:18.4.0'
+    implementation 'com.google.android.gms:play-services-base:18.4.0'
     implementation 'com.google.android.gms:play-services-basement:18.4.0'
-    implementation 'com.google.android.gms:play-services-tasks:18.2.0'
+    implementation 'com.google.android.gms:play-services-tasks:18.4.0'
 
     if (hermesEnabled.toBoolean()) {
         implementation("com.facebook.react:hermes-android")
@@ -150,17 +148,12 @@ dependencies {
     }
 }
 
-// فرض استخدام الإصدارات المتوفرة لجميع مكتبات Google Play Services
+// فرض توحيد جميع إصدارات Google Play Services إلى 18.4.0
 configurations.all {
     resolutionStrategy.eachDependency { DependencyResolveDetails details ->
         if (details.requested.group == 'com.google.android.gms') {
-            // فرض الإصدارات المتوفرة بدلاً من 21.0.1 غير الموجود
-            if (details.requested.name == 'play-services-basement' && details.requested.version == '21.0.1') {
-                details.useVersion '18.4.0'
-            }
-            if (details.requested.name == 'play-services-tasks' && details.requested.version == '21.0.1') {
-                details.useVersion '18.2.0'
-            }
+            // توحيد جميع مكتبات play-services إلى 18.4.0 لتجنب IncompatibleClassChangeError
+            details.useVersion '18.4.0'
         }
     }
 }
