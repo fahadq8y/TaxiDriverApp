@@ -9,6 +9,7 @@ import {
   ScrollView,
 } from 'react-native';
 import firestore from '@react-native-firebase/firestore';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 const TestTrackingScreen = ({ navigation }) => {
   const [driverData, setDriverData] = useState(null);
@@ -16,10 +17,39 @@ const TestTrackingScreen = ({ navigation }) => {
   const [error, setError] = useState(null);
   const [lastUpdate, setLastUpdate] = useState(null);
   const [autoRefresh, setAutoRefresh] = useState(true);
-
-  const testDriverId = 'DRV001'; // معرف تجريبي
+  const [testDriverId, setTestDriverId] = useState(null);
 
   useEffect(() => {
+    // Load driver ID from AsyncStorage
+    const loadDriverId = async () => {
+      try {
+        const storedEmployeeNumber = await AsyncStorage.getItem('employeeNumber');
+        console.log('[TestTracking] Loaded employeeNumber:', storedEmployeeNumber);
+        
+        if (storedEmployeeNumber) {
+          setTestDriverId(storedEmployeeNumber);
+        } else {
+          setError('لم يتم العثور على الرقم الوظيفي. الرجاء تسجيل الدخول مرة أخرى.');
+          setLoading(false);
+        }
+      } catch (err) {
+        console.error('[TestTracking] Error loading driver ID:', err);
+        setError('خطأ في تحميل معرف السائق');
+        setLoading(false);
+      }
+    };
+    
+    loadDriverId();
+  }, []);
+
+  useEffect(() => {
+    if (!testDriverId) {
+      console.log('[TestTracking] No driver ID yet, waiting...');
+      return;
+    }
+    
+    console.log('[TestTracking] Setting up real-time listener for driver:', testDriverId);
+    
     // Subscribe to real-time updates
     const unsubscribe = firestore()
       .collection('drivers')
@@ -51,7 +81,7 @@ const TestTrackingScreen = ({ navigation }) => {
 
     // Cleanup subscription
     return () => unsubscribe();
-  }, []);
+  }, [testDriverId]);
 
   const handleRefresh = async () => {
     try {
