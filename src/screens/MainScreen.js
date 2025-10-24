@@ -43,15 +43,20 @@ const MainScreen = ({ navigation, route }) => {
   }, []);
 
   useEffect(() => {
+    console.log('🔵 MAIN: useEffect triggered - driverId:', driverId, 'locationServiceStarted:', locationServiceStarted);
+    
     // Start location tracking automatically after login
     if (driverId && !locationServiceStarted) {
       console.log('🟢 MAIN: Starting tracking with simplified service');
+      console.log('🟢 MAIN: driverId value:', driverId);
       
       const initTracking = async () => {
         try {
+          console.log('🟢 MAIN: Waiting 2 seconds for screen to render...');
           // Wait for screen to fully render
           await new Promise(resolve => setTimeout(resolve, 2000));
           
+          console.log('🟢 MAIN: Checking location permission...');
           // Check permissions before starting
           const hasPermission = await PermissionsAndroid.check(
             PermissionsAndroid.PERMISSIONS.ACCESS_FINE_LOCATION
@@ -60,16 +65,32 @@ const MainScreen = ({ navigation, route }) => {
           console.log('🟢 MAIN: Has location permission:', hasPermission);
           
           if (hasPermission) {
-            await startLocationTracking(driverId);
+            console.log('✅ MAIN: Permission granted, starting tracking...');
+            const result = await startLocationTracking(driverId);
+            console.log('🟢 MAIN: startLocationTracking result:', result);
           } else {
             console.log('⚠️ MAIN: No location permission, user must enable manually');
+            Alert.alert(
+              'تنبيه',
+              'صلاحية الموقع غير ممنوحة. اضغط على "بدء التتبع" لمنح الصلاحية.',
+              [{ text: 'حسناً' }]
+            );
           }
         } catch (error) {
           console.error('❌ MAIN: Init tracking error:', error);
+          console.error('❌ MAIN: Error message:', error.message);
+          console.error('❌ MAIN: Error stack:', error.stack);
+          Alert.alert(
+            'خطأ',
+            `حدث خطأ أثناء بدء التتبع التلقائي:\n\n${error.message}`,
+            [{ text: 'حسناً' }]
+          );
         }
       };
       
       initTracking();
+    } else {
+      console.log('🔴 MAIN: Skipping auto-start - driverId:', driverId, 'locationServiceStarted:', locationServiceStarted);
     }
   }, [driverId]);
 
@@ -100,6 +121,11 @@ const MainScreen = ({ navigation, route }) => {
       setLoading(false);
     } catch (error) {
       console.error('Error loading driver data:', error);
+      Alert.alert(
+        'خطأ في تحميل البيانات',
+        'حدث خطأ أثناء تحميل بيانات السائق: ' + error.message,
+        [{ text: 'حسناً', onPress: () => navigation.replace('Login') }]
+      );
       setLoading(false);
     }
   };
@@ -137,8 +163,12 @@ const MainScreen = ({ navigation, route }) => {
       
       if (!currentDriverId) {
         console.log('❌ MAIN: ERROR - currentDriverId is null or undefined!');
-        Alert.alert('خطأ', 'لم يتم العثور على معرف السائق. الرجاء تسجيل الدخول مرة أخرى.');
-        return;
+        Alert.alert(
+          'خطأ',
+          'لم يتم العثور على معرف السائق. الرجاء تسجيل الدخول مرة أخرى.',
+          [{ text: 'حسناً' }]
+        );
+        return false;
       }
       
       console.log('🚀 Attempting to start location tracking...');
@@ -149,25 +179,181 @@ const MainScreen = ({ navigation, route }) => {
         setLocationServiceStarted(true);
         console.log('✅ Location tracking started successfully');
         
-        // Don't show alert, just show a toast-like notification
-        // Alert.alert(
-        //   'نجح التفعيل',
-        //   'تم تفعيل خدمة التتبع بنجاح!',
-        //   [{ text: 'حسناً' }]
-        // );
+        // Send confirmation to WebView
+        try {
+          webViewRef.current?.injectJavaScript(`
+            window.postMessage({
+              type: 'TRACKING_STARTED',
+              success: true
+            }, '*');
+            true;
+          `);
+        } catch (webViewError) {
+          console.log('⚠️ Could not send message to WebView:', webViewError.message);
+        }
+        
+        return true;
       } else {
         console.log('⚠️ Location tracking failed to start');
+        Alert.alert(
+          'فشل بدء التتبع',
+          'لم يتم بدء خدمة التتبع. تحقق من:\n1. صلاحية الموقع ممنوحة\n2. خدمات الموقع مفعلة\n3. الاتصال بالإنترنت',
+          [{ text: 'حسناً' }]
+        );
+        return false;
       }
-      
-      // Don't automatically request battery optimization
-      // User can do this manually if needed
     } catch (error) {
       console.error('❌ Error starting location tracking:', error);
       console.error('Error details:', JSON.stringify(error));
       
-      // Don't show any alerts that might crash the app
-      // Just log the error and continue
-      console.log('🟡 MAIN: Location tracking failed, but app continues running');
+      // Show detailed error to user
+      Alert.alert(
+        'خطأ في بدء التتبع',
+        `حدث خطأ أثناء بدء التتبع:\n\n${error.message || error.toString()}\n\nالرجاء التقاط صورة لهذه الرسالة وإرسالها للدعم الفني.`,
+        [{ text: 'حسناً' }]
+      );
+      
+      return false;
+    }
+  };
+
+  const stopLocationTracking = async () => {
+    try {
+      console.log('🛑 MAIN: Attempting to stop location tracking...');
+      
+      const stopped = await LocationService.stop();
+      
+      if (stopped) {
+        setLocationServiceStarted(false);
+        console.log('✅ Location tracking stopped successfully');
+        
+        // Send confirmation to WebView
+        try {
+          webViewRef.current?.injectJavaScript(`
+            window.postMessage({
+              type: 'TRACKING_STOPPED',
+              success: true
+            }, '*');
+            true;
+          `);
+        } catch (webViewError) {
+          console.log('⚠️ Could not send message to WebView:', webViewError.message);
+        }
+        
+        Alert.alert(
+          'تم إيقاف التتبع',
+          'تم إيقاف خدمة التتبع بنجاح',
+          [{ text: 'حسناً' }]
+        );
+        
+        return true;
+      } else {
+        Alert.alert(
+          'فشل إيقاف التتبع',
+          'لم يتم إيقاف خدمة التتبع',
+          [{ text: 'حسناً' }]
+        );
+        return false;
+      }
+    } catch (error) {
+      console.error('❌ Error stopping location tracking:', error);
+      
+      Alert.alert(
+        'خطأ في إيقاف التتبع',
+        `حدث خطأ أثناء إيقاف التتبع:\n\n${error.message || error.toString()}\n\nالرجاء التقاط صورة لهذه الرسالة وإرسالها للدعم الفني.`,
+        [{ text: 'حسناً' }]
+      );
+      
+      return false;
+    }
+  };
+
+  const handleGetCurrentLocation = async () => {
+    try {
+      console.log('📍 MAIN: Getting current location...');
+      
+      const location = await LocationService.getCurrentPosition();
+      
+      if (location) {
+        console.log('✅ Current location:', location.coords);
+        
+        // Send location to WebView
+        try {
+          webViewRef.current?.injectJavaScript(`
+            window.postMessage({
+              type: 'LOCATION_UPDATE',
+              location: {
+                latitude: ${location.coords.latitude},
+                longitude: ${location.coords.longitude},
+                accuracy: ${location.coords.accuracy || 0}
+              }
+            }, '*');
+            true;
+          `);
+        } catch (webViewError) {
+          console.log('⚠️ Could not send location to WebView:', webViewError.message);
+        }
+        
+        Alert.alert(
+          'الموقع الحالي',
+          `خط العرض: ${location.coords.latitude.toFixed(6)}\nخط الطول: ${location.coords.longitude.toFixed(6)}\nالدقة: ${location.coords.accuracy?.toFixed(0) || 'غير معروف'} متر`,
+          [{ text: 'حسناً' }]
+        );
+        
+        return true;
+      } else {
+        Alert.alert(
+          'فشل الحصول على الموقع',
+          'لم يتم الحصول على الموقع الحالي. تحقق من:\n1. صلاحية الموقع ممنوحة\n2. خدمات الموقع مفعلة\n3. أنك في مكان مفتوح',
+          [{ text: 'حسناً' }]
+        );
+        return false;
+      }
+    } catch (error) {
+      console.error('❌ Error getting current location:', error);
+      
+      Alert.alert(
+        'خطأ في الحصول على الموقع',
+        `حدث خطأ أثناء الحصول على الموقع:\n\n${error.message || error.toString()}\n\nالرجاء التقاط صورة لهذه الرسالة وإرسالها للدعم الفني.`,
+        [{ text: 'حسناً' }]
+      );
+      
+      return false;
+    }
+  };
+
+  const handleWebViewMessage = (event) => {
+    try {
+      console.log('📨 MAIN: Received message from WebView:', event.nativeEvent.data);
+      
+      const data = JSON.parse(event.nativeEvent.data);
+      
+      console.log('📨 MAIN: Parsed message:', data);
+      
+      switch (data.action) {
+        case 'startTracking':
+          console.log('📨 MAIN: WebView requested to start tracking');
+          startLocationTracking(driverId);
+          break;
+          
+        case 'stopTracking':
+          console.log('📨 MAIN: WebView requested to stop tracking');
+          stopLocationTracking();
+          break;
+          
+        case 'getCurrentLocation':
+          console.log('📨 MAIN: WebView requested current location');
+          handleGetCurrentLocation();
+          break;
+          
+        default:
+          console.log('📨 MAIN: Unknown action from WebView:', data.action);
+      }
+    } catch (error) {
+      console.error('❌ Error handling WebView message:', error);
+      
+      // Don't show alert for every message error - just log it
+      console.log('⚠️ MAIN: Could not parse WebView message, might be from page itself');
     }
   };
 
@@ -200,6 +386,8 @@ const MainScreen = ({ navigation, route }) => {
               navigation.replace('Login');
             } catch (error) {
               console.error('Error during logout:', error);
+              // Continue with logout even if there's an error
+              navigation.replace('Login');
             }
           },
         },
@@ -232,6 +420,20 @@ const MainScreen = ({ navigation, route }) => {
   const handleWebViewLoad = () => {
     setWebViewLoaded(true);
     console.log('WebView loaded successfully');
+  };
+
+  const handleWebViewError = (syntheticEvent) => {
+    const { nativeEvent } = syntheticEvent;
+    console.warn('WebView error: ', nativeEvent);
+    
+    Alert.alert(
+      'خطأ في التحميل',
+      `حدث خطأ أثناء تحميل الصفحة:\n\n${nativeEvent.description || 'خطأ غير معروف'}\n\nالرجاء التحقق من الاتصال بالإنترنت`,
+      [
+        { text: 'إعادة المحاولة', onPress: () => webViewRef.current?.reload() },
+        { text: 'إلغاء', style: 'cancel' }
+      ]
+    );
   };
 
   if (loading) {
@@ -282,19 +484,10 @@ const MainScreen = ({ navigation, route }) => {
           cacheEnabled={false}
           injectedJavaScript={getInjectedJavaScript()}
           onLoad={handleWebViewLoad}
-          onError={(syntheticEvent) => {
-            const { nativeEvent } = syntheticEvent;
-            console.warn('WebView error: ', nativeEvent);
-            Alert.alert(
-              'خطأ في التحميل',
-              'حدث خطأ أثناء تحميل الصفحة. الرجاء التحقق من الاتصال بالإنترنت'
-            );
-          }}
+          onError={handleWebViewError}
           onLoadStart={() => console.log('WebView loading started')}
           onLoadEnd={() => console.log('WebView loading ended')}
-          onMessage={(event) => {
-            console.log('WebView message:', event.nativeEvent.data);
-          }}
+          onMessage={handleWebViewMessage}
         />
 
         {/* Location Service Indicator */}
