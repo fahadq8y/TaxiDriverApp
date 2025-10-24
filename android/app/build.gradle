@@ -89,6 +89,14 @@ android {
         targetSdkVersion rootProject.ext.targetSdkVersion
         versionCode 1
         versionName "1.0"
+        multiDexEnabled true
+    }
+    
+    // إضافة للتعامل مع تضارب الإصدارات
+    packagingOptions {
+        pickFirst '**/libc++_shared.so'
+        pickFirst '**/libjsc.so'
+        pickFirst '**/libreactnativejni.so'
     }
     signingConfigs {
         debug {
@@ -127,13 +135,31 @@ repositories {
 dependencies {
     // The version of react-native is set by the React Native Gradle Plugin
     implementation("com.facebook.react:react-android")
+    implementation(project(':react-native-background-geolocation'))
     
-    // Google Play Services for Location
-    implementation "com.google.android.gms:play-services-location:${googlePlayServicesVersion}"
+    // ✅ Google Play Services - إصدارات متوافقة
+    implementation platform('com.google.android.gms:play-services-bom:32.0.0')
+    implementation 'com.google.android.gms:play-services-location:21.0.1'
+    implementation 'com.google.android.gms:play-services-maps:18.1.0'
+    implementation 'com.google.android.gms:play-services-base:18.2.0'
 
     if (hermesEnabled.toBoolean()) {
         implementation("com.facebook.react:hermes-android")
     } else {
         implementation jscFlavor
+    }
+}
+
+// تأكد من استخدام إصدار موحد
+configurations.all {
+    resolutionStrategy.eachDependency { DependencyResolveDetails details ->
+        if (details.requested.group == 'com.google.android.gms') {
+            if (details.requested.name == 'play-services-location') {
+                details.useVersion '21.0.1'
+            }
+            if (details.requested.name == 'play-services-maps') {
+                details.useVersion '18.1.0'
+            }
+        }
     }
 }

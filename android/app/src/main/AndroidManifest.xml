@@ -42,6 +42,16 @@
         <meta-data
             android:name="com.transistorsoft.locationmanager.license"
             android:value="6c61f89b598dabe110900e7926bccf8a3f916ebca075a4ee03350712f6d30e83" />
+            
+        <!-- ===== GOOGLE PLAY SERVICES VERSION ===== -->
+        <meta-data
+            android:name="com.google.android.gms.version"
+            android:value="@integer/google_play_services_version" />
+            
+        <!-- ===== ACTIVITY RECOGNITION API SUPPORT ===== -->
+        <meta-data
+            android:name="com.google.android.gms.location.ActivityRecognitionApi"
+            android:value="true" />
 
         <!-- ===== MAIN ACTIVITY ===== -->
         <activity
@@ -66,31 +76,31 @@
         <service 
             android:name="com.transistorsoft.locationmanager.service.TrackingService"
             android:foregroundServiceType="location"
-            tools:replace="android:foregroundServiceType" />
+            android:exported="false" />
 
         <!-- ActivityRecognitionService - Motion detection service -->
         <service 
             android:name="com.transistorsoft.locationmanager.service.ActivityRecognitionService"
             android:foregroundServiceType="location"
-            tools:replace="android:foregroundServiceType" />
+            android:exported="false" />
 
         <!-- LocationRequestService - Location request handling service -->
         <service 
             android:name="com.transistorsoft.locationmanager.service.LocationRequestService"
             android:foregroundServiceType="location"
-            tools:replace="android:foregroundServiceType" />
+            android:exported="false" />
 
         <!-- HeartbeatService - Periodic heartbeat service -->
         <service 
             android:name="com.transistorsoft.locationmanager.service.HeartbeatService"
             android:foregroundServiceType="location"
-            tools:replace="android:foregroundServiceType" />
+            android:exported="false" />
 
         <!-- ===== REACT NATIVE HEADLESS JS SERVICE ===== -->
         <service 
             android:name="com.transistorsoft.rnbackgroundgeolocation.HeadlessTask"
             android:foregroundServiceType="location"
-            tools:replace="android:foregroundServiceType" />
+            android:exported="false" />
 
         <!-- NOTE: Broadcast receivers are already defined in Transistor library -->
         <!-- No need to redefine them here to avoid manifest merger conflicts -->
