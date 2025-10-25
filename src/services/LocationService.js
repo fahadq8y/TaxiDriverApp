@@ -282,11 +282,11 @@ class LocationService {
         return;
       }
 
-      // Save to Firestore
+      // Save to Firestore with set + merge to ensure document exists
       await firestore()
         .collection('drivers')
         .doc(this.currentDriverId)
-        .update({
+        .set({
           location: {
             latitude: location.coords.latitude,
             longitude: location.coords.longitude,
@@ -296,7 +296,7 @@ class LocationService {
           },
           lastUpdate: new Date(),
           isActive: true,
-        });
+        }, { merge: true });
 
       console.log('[LocationService] Location saved to Firestore');
       
