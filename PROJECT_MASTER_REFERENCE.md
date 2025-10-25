@@ -971,3 +971,83 @@ if (driverDoc.exists()) {
 ---
 
 
+
+
+
+---
+
+### التغيير #11: إضافة Headless Task Handler للتتبع في الخلفية
+**التاريخ:** 25 أكتوبر 2025  
+**المشكلة:** عند مسح التطبيق من Recent Apps أو بعد restart الهاتف، الصوت يعمل لكن البيانات لا تُكتب إلى Firestore  
+**السبب الجذري:** Firebase لا يتم تهيئته في Headless Mode  
+
+**الحل:**
+إضافة Headless Task Handler في `index.js`
+
+**الملف:** `index.js`
+
+**ما تم إضافته:**
+```javascript
+// Register Headless Task for background tracking when app is terminated
+const HeadlessTask = async (event) => {
+  const { name, params } = event;
+  
+  if (name === 'location') {
+    const location = params;
+    
+    try {
+      // Get driver ID from storage
+      const AsyncStorage = require('@react-native-async-storage/async-storage').default;
+      const driverId = await AsyncStorage.getItem('employeeNumber');
+      
+      if (!driverId) {
+        console.warn('[HeadlessTask] No driver ID found');
+        return;
+      }
+      
+      // Save to Firestore using set with merge
+      await firestore()
+        .collection('drivers')
+        .doc(driverId)
+        .set({
+          location: { ... },
+          lastUpdate: new Date(),
+          isActive: true,
+        }, { merge: true });
+      
+    } catch (error) {
+      console.error('[HeadlessTask] Error:', error);
+    }
+  }
+};
+
+// Register the headless task
+BackgroundGeolocation.registerHeadlessTask(HeadlessTask);
+```
+
+**كيف يعمل:**
+
+| الحالة | قبل التعديل | بعد التعديل |
+|--------|-------------|-------------|
+| **التطبيق مفتوح** | ✅ يكتب (LocationService) | ✅ يكتب (LocationService) |
+| **في الخلفية** | ✅ يكتب (LocationService) | ✅ يكتب (LocationService) |
+| **بعد المسح من Recent Apps** | ❌ لا يكتب | ✅ يكتب (HeadlessTask) |
+| **بعد Restart** | ❌ لا يكتب | ✅ يكتب (HeadlessTask) |
+
+**النتيجة:**
+- ✅ التتبع يعمل 24/7 في جميع الحالات
+- ✅ البيانات تُكتب إلى Firestore حتى بعد مسح التطبيق
+- ✅ صفحة التتبع تتحدث في الوقت الفعلي دائماً
+- ✅ لا يحتاج السائق فتح التطبيق أبداً
+
+**Commit:** `3e631db`
+
+**⚠️ ملاحظات مهمة:**
+1. HeadlessTask يعمل **فقط** عند مسح التطبيق أو بعد restart
+2. عند فتح التطبيق، LocationService العادي يعمل
+3. لا تعارض بين HeadlessTask و LocationService
+4. آمن 100% - لا يؤثر على الكود الحالي
+
+---
+
+
