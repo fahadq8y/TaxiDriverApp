@@ -1,6 +1,6 @@
 # 📋 المرجع الرئيسي لمشروع Taxi Driver App
 
-> **آخر تحديث:** 25 أكتوبر 2025  
+> **آخر تحديث:** 26 أكتوبر 2025  
 > **الهدف:** توثيق شامل لجميع التغييرات، القواعد، المشاكل، والحلول لتجنب تكرار الأخطاء
 
 ---
@@ -1047,6 +1047,50 @@ BackgroundGeolocation.registerHeadlessTask(HeadlessTask);
 2. عند فتح التطبيق، LocationService العادي يعمل
 3. لا تعارض بين HeadlessTask و LocationService
 4. آمن 100% - لا يؤثر على الكود الحالي
+
+---
+
+
+
+
+
+---
+
+### التغيير #12: إصلاح خطأ البناء - تصحيح اسم مكتبة BackgroundGeolocation
+**التاريخ:** 26 أكتوبر 2025  
+**المشكلة:** فشل البناء على CodeMagic بسبب خطأ في اسم المكتبة  
+**الخطأ:** `Unable to resolve module @transistorsoft/react-native-background-geolocation`
+
+**السبب الجذري:**
+- في `index.js` تم استخدام اسم خاطئ للمكتبة
+- الاسم المستخدم: `@transistorsoft/react-native-background-geolocation` ❌
+- الاسم الصحيح في `package.json`: `react-native-background-geolocation` ✅
+
+**الحل:**
+تصحيح اسم المكتبة في `index.js`
+
+**الملف:** `index.js` - السطر 8
+
+**التعديل:**
+```javascript
+// قبل (خطأ):
+import BackgroundGeolocation from '@transistorsoft/react-native-background-geolocation';
+
+// بعد (صحيح):
+import BackgroundGeolocation from 'react-native-background-geolocation';
+```
+
+**النتيجة:**
+- ✅ البناء ينجح على CodeMagic
+- ✅ لا تغيير في الوظائف (نفس المكتبة)
+- ✅ HeadlessTask يعمل بشكل صحيح
+
+**Commit:** `9f221d4`
+
+**⚠️ ملاحظة مهمة:**
+- الاسم الصحيح للمكتبة في `package.json` هو: `react-native-background-geolocation`
+- **لا تستخدم** البادئة `@transistorsoft/` في الـ imports
+- `LocationService.js` كان يستخدم الاسم الصحيح من البداية ✅
 
 ---
 
