@@ -1,6 +1,6 @@
 # 📋 المرجع الرئيسي لمشروع Taxi Driver App
 
-> **آخر تحديث:** 24 أكتوبر 2025  
+> **آخر تحديث:** 25 أكتوبر 2025  
 > **الهدف:** توثيق شامل لجميع التغييرات، القواعد، المشاكل، والحلول لتجنب تكرار الأخطاء
 
 ---
@@ -773,4 +773,136 @@ lastUpdate: new Date()
 ---
 
 **نهاية دليل الصفحات الشامل**
+
+
+
+
+---
+
+### التغيير #8: تطبيق التتبع التلقائي والخلفية (Persistent Login + Auto-Start)
+**التاريخ:** 25 أكتوبر 2025  
+**المشكلة:** السائق يحتاج لتسجيل دخول كل مرة، والتتبع يتوقف عند إغلاق التطبيق أو restart الهاتف  
+**الحل:**
+
+#### 1. Persistent Login (تسجيل دخول دائم)
+**الملف:** `src/screens/LoginScreen.js`  
+**التعديل:**
+```javascript
+await AsyncStorage.setItem('persistentLogin', 'true');
+```
+**النتيجة:** السائق يسجل دخول مرة واحدة فقط
+
+#### 2. Auto-Login (تسجيل دخول تلقائي)
+**الملف:** `App.tsx`  
+**التعديلات:**
+- إضافة `useEffect` للتحقق من `persistentLogin` عند بدء التطبيق
+- الانتقال تلقائياً إلى `MainScreen` إذا كان مسجل دخول
+- إضافة شاشة تحميل أثناء الفحص
+
+**الكود:**
+```javascript
+const checkLoginStatus = async () => {
+  const persistentLogin = await AsyncStorage.getItem('persistentLogin');
+  const employeeNumber = await AsyncStorage.getItem('employeeNumber');
+  
+  if (persistentLogin === 'true' && employeeNumber) {
+    setInitialRoute('Main');
+  } else {
+    setInitialRoute('Login');
+  }
+};
+```
+
+**النتيجة:** التطبيق يفتح مباشرة على الشاشة الرئيسية بدون شاشة تسجيل دخول
+
+#### 3. Auto-Start Background Tracking (تتبع تلقائي في الخلفية)
+**الملف:** `src/services/LocationService.js`  
+**التعديلات:**
+```javascript
+stopOnTerminate: false,  // لا يتوقف عند إغلاق التطبيق
+startOnBoot: true,       // يبدأ تلقائياً بعد restart الهاتف
+enableHeadless: true,    // يعمل في الخلفية بدون UI
+foregroundService: true, // خدمة أمامية دائمة
+```
+
+**النتيجة:** 
+- ✅ التتبع يعمل 24/7 بدون توقف
+- ✅ يعمل حتى لو التطبيق مغلق
+- ✅ يعمل حتى لو الهاتف مقفل
+- ✅ يبدأ تلقائياً بعد restart الهاتف
+
+#### 4. Permissions (الصلاحيات)
+**الملف:** `android/app/src/main/AndroidManifest.xml`  
+**الصلاحيات المطلوبة (كانت موجودة بالفعل):**
+```xml
+<uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
+<uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+<uses-permission android:name="android.permission.FOREGROUND_SERVICE_LOCATION" />
+<uses-permission android:name="android.permission.ACCESS_BACKGROUND_LOCATION" />
+```
+
+**Commit:** `acff04f`
+
+**الملفات المعدلة:**
+- `src/services/LocationService.js`
+- `src/screens/LoginScreen.js`
+- `App.tsx`
+
+**الملفات الجديدة:**
+- `BACKGROUND_TRACKING_IMPLEMENTATION.md` - توثيق التطبيق
+- `COMPATIBILITY_REVIEW.md` - مراجعة التوافق
+
+**⚠️ ملاحظات مهمة:**
+1. السائق يجب أن يمنح إذن "السماح دائماً" للموقع
+2. يُفضل تعطيل Battery Optimization للتطبيق
+3. التتبع يعمل في الخلفية مع إشعار صغير غير مزعج
+
+---
+
+### التغيير #9: تبسيط صفحة معلومات السائق (driver-view.html)
+**التاريخ:** 25 أكتوبر 2025  
+**المشكلة:** صفحة السائق لا تعرض البيانات - الكود معقد ويخلط بين collections  
+**الحل:**
+
+**الملف:** `Test-taxi/driver-view.html` (على Vercel)
+
+**التعديلات:**
+1. تبسيط دالة `loadDriverData()`:
+   - حذف `loadDrivers()` غير المستخدمة
+   - القراءة المباشرة من `drivers/{driverId}`
+   - إزالة الخلط بين `users` و `drivers` collections
+
+**الكود القديم (معقد):**
+```javascript
+// كان يحمل جميع السائقين ثم يبحث عن السائق المطلوب
+await loadDrivers();
+const driverData = allDrivers.find(d => d.driverId === driverId);
+```
+
+**الكود الجديد (مبسط):**
+```javascript
+// قراءة مباشرة من drivers/{driverId}
+const driverDoc = await getDoc(doc(db, 'drivers', driverId));
+if (driverDoc.exists()) {
+  const driverData = driverDoc.data();
+  displayDriverData(driverData);
+}
+```
+
+**النتيجة:**
+- ✅ الصفحة تعرض البيانات بشكل صحيح
+- ✅ الكود أبسط وأسرع
+- ✅ لا يوجد تعارض مع collections
+
+**Commits:**
+- `09b95c4` - Revert to simpler version before real-time updates
+- `71bfc1b` - Simplify loadDriverData: remove unnecessary complexity
+
+**⚠️ ملاحظة:**
+- تم الرجوع للنسخة البسيطة (قبل real-time updates)
+- تم تطبيق تبسيطات المبرمج المحترف
+- الصفحة الآن تعمل في المتصفح والتطبيق
+
+---
+
 
