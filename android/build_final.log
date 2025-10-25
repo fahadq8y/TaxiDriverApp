@@ -1,0 +1,263 @@
+To honour the JVM settings for this build a single-use Daemon process will be forked. For more on this, please refer to https://docs.gradle.org/9.0.0/userguide/gradle_daemon.html#sec:disabling_the_daemon in the Gradle documentation.
+Daemon will be stopped at the end of the build 
+> Task :gradle-plugin:settings-plugin:checkKotlinGradlePluginConfigurationErrors SKIPPED
+> Task :gradle-plugin:shared:checkKotlinGradlePluginConfigurationErrors SKIPPED
+> Task :gradle-plugin:shared:compileKotlin UP-TO-DATE
+> Task :gradle-plugin:shared:compileJava NO-SOURCE
+> Task :gradle-plugin:shared:processResources NO-SOURCE
+> Task :gradle-plugin:shared:classes UP-TO-DATE
+> Task :gradle-plugin:shared:jar UP-TO-DATE
+> Task :gradle-plugin:settings-plugin:compileKotlin UP-TO-DATE
+> Task :gradle-plugin:settings-plugin:compileJava NO-SOURCE
+> Task :gradle-plugin:settings-plugin:pluginDescriptors UP-TO-DATE
+> Task :gradle-plugin:settings-plugin:processResources UP-TO-DATE
+> Task :gradle-plugin:settings-plugin:classes UP-TO-DATE
+> Task :gradle-plugin:settings-plugin:jar UP-TO-DATE
+> Task :gradle-plugin:react-native-gradle-plugin:checkKotlinGradlePluginConfigurationErrors SKIPPED
+> Task :gradle-plugin:react-native-gradle-plugin:compileKotlin UP-TO-DATE
+> Task :gradle-plugin:react-native-gradle-plugin:compileJava NO-SOURCE
+> Task :gradle-plugin:react-native-gradle-plugin:pluginDescriptors UP-TO-DATE
+> Task :gradle-plugin:react-native-gradle-plugin:processResources UP-TO-DATE
+> Task :gradle-plugin:react-native-gradle-plugin:classes UP-TO-DATE
+> Task :gradle-plugin:react-native-gradle-plugin:jar UP-TO-DATE
+
+> Configure project :app
+[react-native-background-geolocation] Purging debug resources in release build
+
+> Configure project :react-native-firebase_app
+:react-native-firebase_app package.json found at /home/ubuntu/TaxiDriverApp/node_modules/@react-native-firebase/app/package.json
+:react-native-firebase_app:firebase.bom using default value: 34.4.0
+:react-native-firebase_app:play.play-services-auth using default value: 21.4.0
+:react-native-firebase_app package.json found at /home/ubuntu/TaxiDriverApp/node_modules/@react-native-firebase/app/package.json
+:react-native-firebase_app:version set from package.json: 23.4.1 (23,4,1 - 23004001)
+:react-native-firebase_app:android.compileSdk using custom value: 36
+:react-native-firebase_app:android.targetSdk using custom value: 33
+:react-native-firebase_app:android.minSdk using custom value: 24
+:react-native-firebase_app:reactNativeAndroidDir /home/ubuntu/TaxiDriverApp/node_modules/react-native
+
+> Configure project :react-native-firebase_auth
+:react-native-firebase_auth package.json found at /home/ubuntu/TaxiDriverApp/node_modules/@react-native-firebase/auth/package.json
+:react-native-firebase_app package.json found at /home/ubuntu/TaxiDriverApp/node_modules/@react-native-firebase/app/package.json
+:react-native-firebase_auth:firebase.bom using default value: 34.4.0
+:react-native-firebase_auth package.json found at /home/ubuntu/TaxiDriverApp/node_modules/@react-native-firebase/auth/package.json
+:react-native-firebase_auth:version set from package.json: 23.4.1 (23,4,1 - 23004001)
+:react-native-firebase_auth:android.compileSdk using custom value: 36
+:react-native-firebase_auth:android.targetSdk using custom value: 33
+:react-native-firebase_auth:android.minSdk using custom value: 24
+:react-native-firebase_auth:reactNativeAndroidDir /home/ubuntu/TaxiDriverApp/node_modules/react-native
+
+> Configure project :react-native-firebase_firestore
+:react-native-firebase_firestore package.json found at /home/ubuntu/TaxiDriverApp/node_modules/@react-native-firebase/firestore/package.json
+:react-native-firebase_app package.json found at /home/ubuntu/TaxiDriverApp/node_modules/@react-native-firebase/app/package.json
+:react-native-firebase_firestore:firebase.bom using default value: 34.4.0
+:react-native-firebase_firestore package.json found at /home/ubuntu/TaxiDriverApp/node_modules/@react-native-firebase/firestore/package.json
+:react-native-firebase_firestore:version set from package.json: 23.4.1 (23,4,1 - 23004001)
+:react-native-firebase_firestore:android.compileSdk using custom value: 36
+:react-native-firebase_firestore:android.targetSdk using custom value: 33
+:react-native-firebase_firestore:android.minSdk using custom value: 24
+:react-native-firebase_firestore:reactNativeAndroidDir /home/ubuntu/TaxiDriverApp/node_modules/react-native
+WARNING: The specified Android SDK Build Tools version (34.0.0) is ignored, as it is below the minimum supported version (35.0.0) for Android Gradle Plugin 8.12.0.
+Android SDK Build Tools 35.0.0 will be used.
+To suppress this warning, remove "buildToolsVersion '34.0.0'" from your build.gradle file, as each version of the Android Gradle Plugin now has a default version of the build tools.
+
+[Incubating] Problems report is available at: file:///home/ubuntu/TaxiDriverApp/android/build/reports/problems/problems-report.html
+
+FAILURE: Build failed with an exception.
+
+* What went wrong:
+Could not determine the dependencies of task ':app:processDebugResources'.
+> Could not resolve all dependencies for configuration ':app:debugRuntimeClasspath'.
+   > Could not find com.google.android.gms:play-services-basement:21.0.1.
+     Searched in the following locations:
+       - https://dl.google.com/dl/android/maven2/com/google/android/gms/play-services-basement/21.0.1/play-services-basement-21.0.1.pom
+       - https://repo.maven.apache.org/maven2/com/google/android/gms/play-services-basement/21.0.1/play-services-basement-21.0.1.pom
+       - file:/home/ubuntu/TaxiDriverApp/node_modules/react-native-background-geolocation/android/libs/com/google/android/gms/play-services-basement/21.0.1/play-services-basement-21.0.1.pom
+       - https://central.sonatype.com/repository/maven-snapshots/com/google/android/gms/play-services-basement/21.0.1/play-services-basement-21.0.1.pom
+       - https://www.jitpack.io/com/google/android/gms/play-services-basement/21.0.1/play-services-basement-21.0.1.pom
+       - https://maven.google.com/com/google/android/gms/play-services-basement/21.0.1/play-services-basement-21.0.1.pom
+       - file:/home/ubuntu/TaxiDriverApp/node_modules/react-native-background-fetch/android/libs/com/google/android/gms/play-services-basement/21.0.1/play-services-basement-21.0.1.pom
+     Required by:
+         project ':app'
+         project ':app' > project :react-native-firebase_auth > com.google.firebase:firebase-auth:24.0.1
+         project ':app' > project :react-native-firebase_auth > com.google.firebase:firebase-auth:24.0.1 > com.google.android.recaptcha:recaptcha:18.6.1
+   > Could not find com.google.android.gms:play-services-tasks:21.0.1.
+     Searched in the following locations:
+       - https://dl.google.com/dl/android/maven2/com/google/android/gms/play-services-tasks/21.0.1/play-services-tasks-21.0.1.pom
+       - https://repo.maven.apache.org/maven2/com/google/android/gms/play-services-tasks/21.0.1/play-services-tasks-21.0.1.pom
+       - file:/home/ubuntu/TaxiDriverApp/node_modules/react-native-background-geolocation/android/libs/com/google/android/gms/play-services-tasks/21.0.1/play-services-tasks-21.0.1.pom
+       - https://central.sonatype.com/repository/maven-snapshots/com/google/android/gms/play-services-tasks/21.0.1/play-services-tasks-21.0.1.pom
+       - https://www.jitpack.io/com/google/android/gms/play-services-tasks/21.0.1/play-services-tasks-21.0.1.pom
+       - https://maven.google.com/com/google/android/gms/play-services-tasks/21.0.1/play-services-tasks-21.0.1.pom
+       - file:/home/ubuntu/TaxiDriverApp/node_modules/react-native-background-fetch/android/libs/com/google/android/gms/play-services-tasks/21.0.1/play-services-tasks-21.0.1.pom
+     Required by:
+         project ':app'
+         project ':app' > project :react-native-firebase_app > com.google.android.gms:play-services-auth:21.4.0
+         project ':app' > project :react-native-firebase_auth > com.google.firebase:firebase-auth:24.0.1
+         project ':app' > project :react-native-firebase_auth > com.google.firebase:firebase-auth:24.0.1 > com.google.android.recaptcha:recaptcha:18.6.1
+   > Could not find com.google.android.gms:play-services-basement:21.0.1.
+     Searched in the following locations:
+       - https://dl.google.com/dl/android/maven2/com/google/android/gms/play-services-basement/21.0.1/play-services-basement-21.0.1.pom
+       - https://repo.maven.apache.org/maven2/com/google/android/gms/play-services-basement/21.0.1/play-services-basement-21.0.1.pom
+       - file:/home/ubuntu/TaxiDriverApp/node_modules/react-native-background-geolocation/android/libs/com/google/android/gms/play-services-basement/21.0.1/play-services-basement-21.0.1.pom
+       - https://central.sonatype.com/repository/maven-snapshots/com/google/android/gms/play-services-basement/21.0.1/play-services-basement-21.0.1.pom
+       - https://www.jitpack.io/com/google/android/gms/play-services-basement/21.0.1/play-services-basement-21.0.1.pom
+       - https://maven.google.com/com/google/android/gms/play-services-basement/21.0.1/play-services-basement-21.0.1.pom
+       - file:/home/ubuntu/TaxiDriverApp/node_modules/react-native-background-fetch/android/libs/com/google/android/gms/play-services-basement/21.0.1/play-services-basement-21.0.1.pom
+     Required by:
+         project ':app' > com.google.android.gms:play-services-location:21.0.1
+         project ':app' > com.google.android.gms:play-services-base:18.2.0
+         project ':app' > project :react-native-firebase_auth > com.google.firebase:firebase-auth:24.0.1 > com.google.android.play:integrity:1.3.0
+   > Could not find com.google.android.gms:play-services-tasks:21.0.1.
+     Searched in the following locations:
+       - https://dl.google.com/dl/android/maven2/com/google/android/gms/play-services-tasks/21.0.1/play-services-tasks-21.0.1.pom
+       - https://repo.maven.apache.org/maven2/com/google/android/gms/play-services-tasks/21.0.1/play-services-tasks-21.0.1.pom
+       - file:/home/ubuntu/TaxiDriverApp/node_modules/react-native-background-geolocation/android/libs/com/google/android/gms/play-services-tasks/21.0.1/play-services-tasks-21.0.1.pom
+       - https://central.sonatype.com/repository/maven-snapshots/com/google/android/gms/play-services-tasks/21.0.1/play-services-tasks-21.0.1.pom
+       - https://www.jitpack.io/com/google/android/gms/play-services-tasks/21.0.1/play-services-tasks-21.0.1.pom
+       - https://maven.google.com/com/google/android/gms/play-services-tasks/21.0.1/play-services-tasks-21.0.1.pom
+       - file:/home/ubuntu/TaxiDriverApp/node_modules/react-native-background-fetch/android/libs/com/google/android/gms/play-services-tasks/21.0.1/play-services-tasks-21.0.1.pom
+     Required by:
+         project ':app' > com.google.android.gms:play-services-location:21.0.1
+         project ':app' > com.google.android.gms:play-services-base:18.2.0
+         project ':app' > project :react-native-firebase_auth > com.google.firebase:firebase-auth:24.0.1 > com.google.android.play:integrity:1.3.0
+   > Could not find com.google.android.gms:play-services-basement:21.0.1.
+     Searched in the following locations:
+       - https://dl.google.com/dl/android/maven2/com/google/android/gms/play-services-basement/21.0.1/play-services-basement-21.0.1.pom
+       - https://repo.maven.apache.org/maven2/com/google/android/gms/play-services-basement/21.0.1/play-services-basement-21.0.1.pom
+       - file:/home/ubuntu/TaxiDriverApp/node_modules/react-native-background-geolocation/android/libs/com/google/android/gms/play-services-basement/21.0.1/play-services-basement-21.0.1.pom
+       - https://central.sonatype.com/repository/maven-snapshots/com/google/android/gms/play-services-basement/21.0.1/play-services-basement-21.0.1.pom
+       - https://www.jitpack.io/com/google/android/gms/play-services-basement/21.0.1/play-services-basement-21.0.1.pom
+       - https://maven.google.com/com/google/android/gms/play-services-basement/21.0.1/play-services-basement-21.0.1.pom
+       - file:/home/ubuntu/TaxiDriverApp/node_modules/react-native-background-fetch/android/libs/com/google/android/gms/play-services-basement/21.0.1/play-services-basement-21.0.1.pom
+     Required by:
+         project ':app' > com.google.android.gms:play-services-maps:18.1.0
+         project ':app' > project :react-native-firebase_app > com.google.android.gms:play-services-auth:21.4.0 > com.google.android.gms:play-services-fido:20.1.0
+   > Could not find com.google.android.gms:play-services-basement:21.0.1.
+     Searched in the following locations:
+       - https://dl.google.com/dl/android/maven2/com/google/android/gms/play-services-basement/21.0.1/play-services-basement-21.0.1.pom
+       - https://repo.maven.apache.org/maven2/com/google/android/gms/play-services-basement/21.0.1/play-services-basement-21.0.1.pom
+       - file:/home/ubuntu/TaxiDriverApp/node_modules/react-native-background-geolocation/android/libs/com/google/android/gms/play-services-basement/21.0.1/play-services-basement-21.0.1.pom
+       - https://central.sonatype.com/repository/maven-snapshots/com/google/android/gms/play-services-basement/21.0.1/play-services-basement-21.0.1.pom
+       - https://www.jitpack.io/com/google/android/gms/play-services-basement/21.0.1/play-services-basement-21.0.1.pom
+       - https://maven.google.com/com/google/android/gms/play-services-basement/21.0.1/play-services-basement-21.0.1.pom
+       - file:/home/ubuntu/TaxiDriverApp/node_modules/react-native-background-fetch/android/libs/com/google/android/gms/play-services-basement/21.0.1/play-services-basement-21.0.1.pom
+     Required by:
+         project ':app' > project :react-native-firebase_app > com.google.android.gms:play-services-auth:21.4.0
+   > Could not find com.google.android.gms:play-services-basement:21.0.1.
+     Searched in the following locations:
+       - https://dl.google.com/dl/android/maven2/com/google/android/gms/play-services-basement/21.0.1/play-services-basement-21.0.1.pom
+       - https://repo.maven.apache.org/maven2/com/google/android/gms/play-services-basement/21.0.1/play-services-basement-21.0.1.pom
+       - file:/home/ubuntu/TaxiDriverApp/node_modules/react-native-background-geolocation/android/libs/com/google/android/gms/play-services-basement/21.0.1/play-services-basement-21.0.1.pom
+       - https://central.sonatype.com/repository/maven-snapshots/com/google/android/gms/play-services-basement/21.0.1/play-services-basement-21.0.1.pom
+       - https://www.jitpack.io/com/google/android/gms/play-services-basement/21.0.1/play-services-basement-21.0.1.pom
+       - https://maven.google.com/com/google/android/gms/play-services-basement/21.0.1/play-services-basement-21.0.1.pom
+       - file:/home/ubuntu/TaxiDriverApp/node_modules/react-native-background-fetch/android/libs/com/google/android/gms/play-services-basement/21.0.1/play-services-basement-21.0.1.pom
+     Required by:
+         project ':app' > project :react-native-firebase_app > com.google.firebase:firebase-common:22.0.1
+   > Could not find com.google.android.gms:play-services-tasks:21.0.1.
+     Searched in the following locations:
+       - https://dl.google.com/dl/android/maven2/com/google/android/gms/play-services-tasks/21.0.1/play-services-tasks-21.0.1.pom
+       - https://repo.maven.apache.org/maven2/com/google/android/gms/play-services-tasks/21.0.1/play-services-tasks-21.0.1.pom
+       - file:/home/ubuntu/TaxiDriverApp/node_modules/react-native-background-geolocation/android/libs/com/google/android/gms/play-services-tasks/21.0.1/play-services-tasks-21.0.1.pom
+       - https://central.sonatype.com/repository/maven-snapshots/com/google/android/gms/play-services-tasks/21.0.1/play-services-tasks-21.0.1.pom
+       - https://www.jitpack.io/com/google/android/gms/play-services-tasks/21.0.1/play-services-tasks-21.0.1.pom
+       - https://maven.google.com/com/google/android/gms/play-services-tasks/21.0.1/play-services-tasks-21.0.1.pom
+       - file:/home/ubuntu/TaxiDriverApp/node_modules/react-native-background-fetch/android/libs/com/google/android/gms/play-services-tasks/21.0.1/play-services-tasks-21.0.1.pom
+     Required by:
+         project ':app' > project :react-native-firebase_app > com.google.firebase:firebase-common:22.0.1
+         project ':app' > project :react-native-firebase_firestore > com.google.firebase:firebase-firestore:26.0.2
+   > Could not find com.google.android.gms:play-services-basement:21.0.1.
+     Searched in the following locations:
+       - https://dl.google.com/dl/android/maven2/com/google/android/gms/play-services-basement/21.0.1/play-services-basement-21.0.1.pom
+       - https://repo.maven.apache.org/maven2/com/google/android/gms/play-services-basement/21.0.1/play-services-basement-21.0.1.pom
+       - file:/home/ubuntu/TaxiDriverApp/node_modules/react-native-background-geolocation/android/libs/com/google/android/gms/play-services-basement/21.0.1/play-services-basement-21.0.1.pom
+       - https://central.sonatype.com/repository/maven-snapshots/com/google/android/gms/play-services-basement/21.0.1/play-services-basement-21.0.1.pom
+       - https://www.jitpack.io/com/google/android/gms/play-services-basement/21.0.1/play-services-basement-21.0.1.pom
+       - https://maven.google.com/com/google/android/gms/play-services-basement/21.0.1/play-services-basement-21.0.1.pom
+       - file:/home/ubuntu/TaxiDriverApp/node_modules/react-native-background-fetch/android/libs/com/google/android/gms/play-services-basement/21.0.1/play-services-basement-21.0.1.pom
+     Required by:
+         project ':app' > project :react-native-firebase_firestore > com.google.firebase:firebase-firestore:26.0.2
+   > Could not find com.google.android.gms:play-services-basement:21.0.1.
+     Searched in the following locations:
+       - https://dl.google.com/dl/android/maven2/com/google/android/gms/play-services-basement/21.0.1/play-services-basement-21.0.1.pom
+       - https://repo.maven.apache.org/maven2/com/google/android/gms/play-services-basement/21.0.1/play-services-basement-21.0.1.pom
+       - file:/home/ubuntu/TaxiDriverApp/node_modules/react-native-background-geolocation/android/libs/com/google/android/gms/play-services-basement/21.0.1/play-services-basement-21.0.1.pom
+       - https://central.sonatype.com/repository/maven-snapshots/com/google/android/gms/play-services-basement/21.0.1/play-services-basement-21.0.1.pom
+       - https://www.jitpack.io/com/google/android/gms/play-services-basement/21.0.1/play-services-basement-21.0.1.pom
+       - https://maven.google.com/com/google/android/gms/play-services-basement/21.0.1/play-services-basement-21.0.1.pom
+       - file:/home/ubuntu/TaxiDriverApp/node_modules/react-native-background-fetch/android/libs/com/google/android/gms/play-services-basement/21.0.1/play-services-basement-21.0.1.pom
+     Required by:
+         project ':app' > project :react-native-firebase_app > com.google.android.gms:play-services-auth:21.4.0 > com.google.android.gms:play-services-auth-api-phone:18.0.2
+   > Could not find com.google.android.gms:play-services-tasks:21.0.1.
+     Searched in the following locations:
+       - https://dl.google.com/dl/android/maven2/com/google/android/gms/play-services-tasks/21.0.1/play-services-tasks-21.0.1.pom
+       - https://repo.maven.apache.org/maven2/com/google/android/gms/play-services-tasks/21.0.1/play-services-tasks-21.0.1.pom
+       - file:/home/ubuntu/TaxiDriverApp/node_modules/react-native-background-geolocation/android/libs/com/google/android/gms/play-services-tasks/21.0.1/play-services-tasks-21.0.1.pom
+       - https://central.sonatype.com/repository/maven-snapshots/com/google/android/gms/play-services-tasks/21.0.1/play-services-tasks-21.0.1.pom
+       - https://www.jitpack.io/com/google/android/gms/play-services-tasks/21.0.1/play-services-tasks-21.0.1.pom
+       - https://maven.google.com/com/google/android/gms/play-services-tasks/21.0.1/play-services-tasks-21.0.1.pom
+       - file:/home/ubuntu/TaxiDriverApp/node_modules/react-native-background-fetch/android/libs/com/google/android/gms/play-services-tasks/21.0.1/play-services-tasks-21.0.1.pom
+     Required by:
+         project ':app' > project :react-native-firebase_app > com.google.android.gms:play-services-auth:21.4.0 > com.google.android.gms:play-services-auth-api-phone:18.0.2
+         project ':app' > project :react-native-firebase_app > com.google.android.gms:play-services-auth:21.4.0 > com.google.android.gms:play-services-auth-base:18.0.10
+         project ':app' > project :react-native-firebase_auth > com.google.firebase:firebase-auth:24.0.1 > com.google.firebase:firebase-appcheck-interop:17.0.0
+         project ':app' > project :react-native-firebase_app > com.google.android.gms:play-services-auth:21.4.0 > com.google.android.gms:play-services-fido:20.1.0
+   > Could not find com.google.android.gms:play-services-basement:21.0.1.
+     Searched in the following locations:
+       - https://dl.google.com/dl/android/maven2/com/google/android/gms/play-services-basement/21.0.1/play-services-basement-21.0.1.pom
+       - https://repo.maven.apache.org/maven2/com/google/android/gms/play-services-basement/21.0.1/play-services-basement-21.0.1.pom
+       - file:/home/ubuntu/TaxiDriverApp/node_modules/react-native-background-geolocation/android/libs/com/google/android/gms/play-services-basement/21.0.1/play-services-basement-21.0.1.pom
+       - https://central.sonatype.com/repository/maven-snapshots/com/google/android/gms/play-services-basement/21.0.1/play-services-basement-21.0.1.pom
+       - https://www.jitpack.io/com/google/android/gms/play-services-basement/21.0.1/play-services-basement-21.0.1.pom
+       - https://maven.google.com/com/google/android/gms/play-services-basement/21.0.1/play-services-basement-21.0.1.pom
+       - file:/home/ubuntu/TaxiDriverApp/node_modules/react-native-background-fetch/android/libs/com/google/android/gms/play-services-basement/21.0.1/play-services-basement-21.0.1.pom
+     Required by:
+         project ':app' > project :react-native-firebase_app > com.google.android.gms:play-services-auth:21.4.0 > com.google.android.gms:play-services-auth-base:18.0.10
+   > Could not find com.google.android.gms:play-services-basement:21.0.1.
+     Searched in the following locations:
+       - https://dl.google.com/dl/android/maven2/com/google/android/gms/play-services-basement/21.0.1/play-services-basement-21.0.1.pom
+       - https://repo.maven.apache.org/maven2/com/google/android/gms/play-services-basement/21.0.1/play-services-basement-21.0.1.pom
+       - file:/home/ubuntu/TaxiDriverApp/node_modules/react-native-background-geolocation/android/libs/com/google/android/gms/play-services-basement/21.0.1/play-services-basement-21.0.1.pom
+       - https://central.sonatype.com/repository/maven-snapshots/com/google/android/gms/play-services-basement/21.0.1/play-services-basement-21.0.1.pom
+       - https://www.jitpack.io/com/google/android/gms/play-services-basement/21.0.1/play-services-basement-21.0.1.pom
+       - https://maven.google.com/com/google/android/gms/play-services-basement/21.0.1/play-services-basement-21.0.1.pom
+       - file:/home/ubuntu/TaxiDriverApp/node_modules/react-native-background-fetch/android/libs/com/google/android/gms/play-services-basement/21.0.1/play-services-basement-21.0.1.pom
+     Required by:
+         project ':app' > project :react-native-firebase_auth > com.google.firebase:firebase-auth:24.0.1 > com.google.firebase:firebase-auth-interop:20.0.0
+   > Could not find com.google.android.gms:play-services-tasks:21.0.1.
+     Searched in the following locations:
+       - https://dl.google.com/dl/android/maven2/com/google/android/gms/play-services-tasks/21.0.1/play-services-tasks-21.0.1.pom
+       - https://repo.maven.apache.org/maven2/com/google/android/gms/play-services-tasks/21.0.1/play-services-tasks-21.0.1.pom
+       - file:/home/ubuntu/TaxiDriverApp/node_modules/react-native-background-geolocation/android/libs/com/google/android/gms/play-services-tasks/21.0.1/play-services-tasks-21.0.1.pom
+       - https://central.sonatype.com/repository/maven-snapshots/com/google/android/gms/play-services-tasks/21.0.1/play-services-tasks-21.0.1.pom
+       - https://www.jitpack.io/com/google/android/gms/play-services-tasks/21.0.1/play-services-tasks-21.0.1.pom
+       - https://maven.google.com/com/google/android/gms/play-services-tasks/21.0.1/play-services-tasks-21.0.1.pom
+       - file:/home/ubuntu/TaxiDriverApp/node_modules/react-native-background-fetch/android/libs/com/google/android/gms/play-services-tasks/21.0.1/play-services-tasks-21.0.1.pom
+     Required by:
+         project ':app' > project :react-native-firebase_auth > com.google.firebase:firebase-auth:24.0.1 > com.google.firebase:firebase-auth-interop:20.0.0
+   > Could not find com.google.android.gms:play-services-tasks:21.0.1.
+     Searched in the following locations:
+       - https://dl.google.com/dl/android/maven2/com/google/android/gms/play-services-tasks/21.0.1/play-services-tasks-21.0.1.pom
+       - https://repo.maven.apache.org/maven2/com/google/android/gms/play-services-tasks/21.0.1/play-services-tasks-21.0.1.pom
+       - file:/home/ubuntu/TaxiDriverApp/node_modules/react-native-background-geolocation/android/libs/com/google/android/gms/play-services-tasks/21.0.1/play-services-tasks-21.0.1.pom
+       - https://central.sonatype.com/repository/maven-snapshots/com/google/android/gms/play-services-tasks/21.0.1/play-services-tasks-21.0.1.pom
+       - https://www.jitpack.io/com/google/android/gms/play-services-tasks/21.0.1/play-services-tasks-21.0.1.pom
+       - https://maven.google.com/com/google/android/gms/play-services-tasks/21.0.1/play-services-tasks-21.0.1.pom
+       - file:/home/ubuntu/TaxiDriverApp/node_modules/react-native-background-fetch/android/libs/com/google/android/gms/play-services-tasks/21.0.1/play-services-tasks-21.0.1.pom
+     Required by:
+         project ':app' > project :react-native-firebase_app > com.google.firebase:firebase-common:22.0.1 > org.jetbrains.kotlinx:kotlinx-coroutines-play-services:1.9.0
+
+* Try:
+> Run with --stacktrace option to get the stack trace.
+> Run with --info or --debug option to get more log output.
+> Run with --scan to generate a Build Scan (Powered by Develocity).
+> Get more help at https://help.gradle.org.
+
+Deprecated Gradle features were used in this build, making it incompatible with Gradle 10.
+
+You can use '--warning-mode all' to show the individual deprecation warnings and determine if they come from your own scripts or plugins.
+
+For more on this, please refer to https://docs.gradle.org/9.0.0/userguide/command_line_interface.html#sec:command_line_warnings in the Gradle documentation.
+
+BUILD FAILED in 38s
+10 actionable tasks: 10 up-to-date

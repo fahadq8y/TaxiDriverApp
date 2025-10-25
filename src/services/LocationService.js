@@ -82,13 +82,13 @@ class LocationService {
         debug: true, // Enable debug to see errors
         logLevel: BackgroundGeolocation.LOG_LEVEL_VERBOSE,
         stopOnTerminate: false,
-        startOnBoot: false,
+        startOnBoot: true,
         
         // IMPORTANT: foregroundService is REQUIRED for Android 8+
         foregroundService: true,
         
-        // Disable headless mode
-        enableHeadless: false,
+        // Enable headless mode for background operation
+        enableHeadless: true,
         
         // REQUIRED notification for foreground service (Android 8+)
         notification: {

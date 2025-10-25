@@ -89,6 +89,7 @@ const LoginScreen = ({ navigation }) => {
         await AsyncStorage.setItem('userName', userName);
         await AsyncStorage.setItem('employeeNumber', employeeNumber); // حفظ الرقم الوظيفي
         await AsyncStorage.setItem('userRole', 'driver');
+        await AsyncStorage.setItem('persistentLogin', 'true'); // حفظ حالة تسجيل الدخول الدائم
         
         // التحقق من الحفظ
         const savedEmployeeNumber = await AsyncStorage.getItem('employeeNumber');
