@@ -79,7 +79,7 @@ class LocationService {
         distanceFilter: 10,
         
         // Application config
-        debug: true, // Enable debug to see errors
+        debug: false, // Disable debug sounds - set to false to stop all sound effects
         logLevel: BackgroundGeolocation.LOG_LEVEL_VERBOSE,
         stopOnTerminate: false,
         startOnBoot: true,
