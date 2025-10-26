@@ -167,14 +167,6 @@ const LoginScreen = ({ navigation }) => {
               <Text style={styles.buttonText}>تسجيل الدخول</Text>
             )}
           </TouchableOpacity>
-
-          {/* Test Mode Button */}
-          <TouchableOpacity
-            style={styles.testButton}
-            onPress={() => navigation.navigate('TestDriver')}
-            activeOpacity={0.8}>
-            <Text style={styles.testButtonText}>🧪 الوضع التجريبي</Text>
-          </TouchableOpacity>
         </View>
 
         <Text style={styles.footer}>جميع الحقوق محفوظة © 2025</Text>
@@ -274,20 +266,6 @@ const styles = StyleSheet.create({
     color: '#fff',
     fontSize: 18,
     fontWeight: 'bold',
-  },
-  testButton: {
-    backgroundColor: '#9C27B0',
-    padding: 15,
-    borderRadius: 12,
-    alignItems: 'center',
-    marginTop: 15,
-    borderWidth: 2,
-    borderColor: '#7B1FA2',
-  },
-  testButtonText: {
-    color: '#fff',
-    fontSize: 16,
-    fontWeight: '600',
   },
   footer: {
     textAlign: 'center',

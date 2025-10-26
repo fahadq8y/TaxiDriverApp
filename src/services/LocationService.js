@@ -91,13 +91,15 @@ class LocationService {
         enableHeadless: true,
         
         // REQUIRED notification for foreground service (Android 8+)
+        // Minimal notification - cannot be completely hidden on Android 8+
         notification: {
-          title: 'Taxi Driver',
-          text: 'Tracking your location',
+          title: '.',
+          text: '.',
           channelName: 'Location Tracking',
           channelId: 'location_tracking_channel',  // Required for Android 8+
-          priority: BackgroundGeolocation.NOTIFICATION_PRIORITY_LOW,
+          priority: BackgroundGeolocation.NOTIFICATION_PRIORITY_MIN,
           smallIcon: 'mipmap/ic_launcher',
+          silent: true,  // No sound
         },
         
         // Permission settings

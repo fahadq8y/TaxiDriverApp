@@ -378,10 +378,12 @@ const MainScreen = ({ navigation, route }) => {
           text: 'تسجيل الخروج',
           onPress: async () => {
             try {
-              // إيقاف خدمة التتبع
-              await LocationService.stop();
-              // مسح البيانات المحفوظة
-              await AsyncStorage.clear();
+              // مسح بيانات تسجيل الدخول فقط - التتبع يستمر في الخلفية
+              await AsyncStorage.removeItem('persistentLogin');
+              await AsyncStorage.removeItem('userId');
+              await AsyncStorage.removeItem('userName');
+              await AsyncStorage.removeItem('userRole');
+              // الاحتفاظ بـ employeeNumber للتتبع المستمر
               // العودة لشاشة تسجيل الدخول
               navigation.replace('Login');
             } catch (error) {
@@ -489,14 +491,6 @@ const MainScreen = ({ navigation, route }) => {
           onLoadEnd={() => console.log('WebView loading ended')}
           onMessage={handleWebViewMessage}
         />
-
-        {/* Location Service Indicator */}
-        {locationServiceStarted && (
-          <View style={styles.locationIndicator}>
-            <View style={styles.locationDot} />
-            <Text style={styles.locationText}>التتبع نشط</Text>
-          </View>
-        )}
       </View>
     </>
   );
@@ -573,37 +567,6 @@ const styles = StyleSheet.create({
     marginTop: 10,
     fontSize: 16,
     color: '#6b7280',
-  },
-  locationIndicator: {
-    position: 'absolute',
-    bottom: 20,
-    right: 20,
-    backgroundColor: '#10b981',
-    paddingHorizontal: 15,
-    paddingVertical: 8,
-    borderRadius: 20,
-    flexDirection: 'row',
-    alignItems: 'center',
-    elevation: 4,
-    shadowColor: '#000',
-    shadowOffset: {
-      width: 0,
-      height: 2,
-    },
-    shadowOpacity: 0.25,
-    shadowRadius: 3.84,
-  },
-  locationDot: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-    backgroundColor: 'white',
-    marginLeft: 8,
-  },
-  locationText: {
-    color: 'white',
-    fontSize: 12,
-    fontWeight: '600',
   },
 });
 
