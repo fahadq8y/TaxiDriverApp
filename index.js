@@ -11,6 +11,54 @@ import firestore from '@react-native-firebase/firestore';
 // Register main app component
 AppRegistry.registerComponent(appName, () => App);
 
+// Variables to track last history save (persistent across location updates)
+let lastHistorySaveTime = null;
+let lastHistorySaveLocation = null;
+
+// Calculate distance between two coordinates in meters (Haversine formula)
+const calculateDistance = (lat1, lon1, lat2, lon2) => {
+  const R = 6371e3; // Earth radius in meters
+  const φ1 = lat1 * Math.PI / 180;
+  const φ2 = lat2 * Math.PI / 180;
+  const Δφ = (lat2 - lat1) * Math.PI / 180;
+  const Δλ = (lon2 - lon1) * Math.PI / 180;
+
+  const a = Math.sin(Δφ/2) * Math.sin(Δφ/2) +
+            Math.cos(φ1) * Math.cos(φ2) *
+            Math.sin(Δλ/2) * Math.sin(Δλ/2);
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+
+  return R * c; // Distance in meters
+};
+
+// Check if we should save this location to history
+const shouldSaveToHistory = (location) => {
+  const now = Date.now();
+  const currentLat = location.coords.latitude;
+  const currentLng = location.coords.longitude;
+  
+  // Save if it's the first location
+  if (!lastHistorySaveTime || !lastHistorySaveLocation) {
+    return true;
+  }
+  
+  // Save if 1 minute has passed
+  const timeDiff = now - lastHistorySaveTime;
+  if (timeDiff >= 60000) { // 60 seconds
+    return true;
+  }
+  
+  // Save if moved more than 50 meters
+  const lastLat = lastHistorySaveLocation.latitude;
+  const lastLng = lastHistorySaveLocation.longitude;
+  const distance = calculateDistance(lastLat, lastLng, currentLat, currentLng);
+  if (distance >= 50) { // 50 meters
+    return true;
+  }
+  
+  return false;
+};
+
 // Register Headless Task for background tracking when app is terminated
 const HeadlessTask = async (event) => {
   const { name, params } = event;
@@ -33,7 +81,7 @@ const HeadlessTask = async (event) => {
       
       console.log('[HeadlessTask] Saving location for driver:', driverId);
       
-      // Save to Firestore using set with merge
+      // Save to drivers collection (current location)
       await firestore()
         .collection('drivers')
         .doc(driverId)
@@ -49,7 +97,45 @@ const HeadlessTask = async (event) => {
           isActive: true,
         }, { merge: true });
       
-      console.log('[HeadlessTask] Location saved successfully to Firestore');
+      console.log('[HeadlessTask] Location saved successfully to drivers collection');
+      
+      // Save to locationHistory if conditions are met
+      if (shouldSaveToHistory(location)) {
+        try {
+          // Calculate expiry date (2 months from now)
+          const expiryDate = new Date();
+          expiryDate.setMonth(expiryDate.getMonth() + 2);
+          
+          await firestore()
+            .collection('locationHistory')
+            .add({
+              driverId: driverId,
+              latitude: location.coords.latitude,
+              longitude: location.coords.longitude,
+              accuracy: location.coords.accuracy || 0,
+              speed: location.coords.speed || 0,
+              heading: location.coords.heading || 0,
+              timestamp: new Date(),
+              expiryDate: expiryDate,
+              appState: 'background',
+              userId: driverId,
+            });
+          
+          // Update last save time and location
+          lastHistorySaveTime = Date.now();
+          lastHistorySaveLocation = {
+            latitude: location.coords.latitude,
+            longitude: location.coords.longitude,
+          };
+          
+          console.log('[HeadlessTask] Location saved to locationHistory');
+        } catch (historyError) {
+          console.error('[HeadlessTask] Error saving to locationHistory:', historyError);
+          // Don't throw - just log the error
+        }
+      } else {
+        console.log('[HeadlessTask] Skipping locationHistory save (conditions not met)');
+      }
       
     } catch (error) {
       console.error('[HeadlessTask] Error saving location:', error);
@@ -59,3 +145,4 @@ const HeadlessTask = async (event) => {
 
 // Register the headless task
 BackgroundGeolocation.registerHeadlessTask(HeadlessTask);
+
