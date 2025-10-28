@@ -16,9 +16,8 @@ import {
 import { WebView } from 'react-native-webview';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import LocationService from '../services/LocationService';
-import TrackingWatchdog from '../services/TrackingWatchdog';
 
-const { PowerManagerModule, BatteryOptimization } = NativeModules;
+const { PowerManagerModule } = NativeModules;
 
 const MainScreen = ({ navigation, route }) => {
   const [userId, setUserId] = useState(null);
@@ -31,11 +30,6 @@ const MainScreen = ({ navigation, route }) => {
 
   useEffect(() => {
     loadDriverData();
-    
-    // فحص Battery Optimization بعد 5 ثواني
-    setTimeout(() => {
-      checkBatteryOptimization();
-    }, 5000);
 
     // Handle back button
     const backHandler = BackHandler.addEventListener(
@@ -136,37 +130,6 @@ const MainScreen = ({ navigation, route }) => {
     }
   };
 
-  const checkBatteryOptimization = async () => {
-    if (Platform.OS !== 'android' || !BatteryOptimization) {
-      return;
-    }
-    
-    try {
-      console.log('🔋 Checking battery optimization status...');
-      const isIgnoring = await BatteryOptimization.isIgnoringBatteryOptimizations();
-      console.log('🔋 Battery optimization ignored:', isIgnoring);
-      
-      if (!isIgnoring) {
-        // عرض dialog لطلب الاستثناء
-        Alert.alert(
-          'تحسين الأداء',
-          'للحصول على أفضل دقة في التتبع، يرجى السماح للتطبيق بالعمل في الخلفية بدون قيود.',
-          [
-            { text: 'لاحقاً', style: 'cancel' },
-            { 
-              text: 'السماح', 
-              onPress: () => BatteryOptimization.requestIgnoreBatteryOptimizations()
-            }
-          ]
-        );
-      } else {
-        console.log('✅ Battery optimization already disabled');
-      }
-    } catch (error) {
-      console.error('❌ Error checking battery optimization:', error);
-    }
-  };
-  
   const checkAndRequestBatteryOptimization = async () => {
     if (Platform.OS === 'android') {
       try {
@@ -215,10 +178,6 @@ const MainScreen = ({ navigation, route }) => {
       if (started) {
         setLocationServiceStarted(true);
         console.log('✅ Location tracking started successfully');
-        
-        // بدء Watchdog للمراقبة
-        TrackingWatchdog.start();
-        console.log('✅ Watchdog started');
         
         // Send confirmation to WebView
         try {
@@ -378,9 +337,8 @@ const MainScreen = ({ navigation, route }) => {
           break;
           
         case 'stopTracking':
-          console.log('⚠️ MAIN: stopTracking disabled for continuous tracking');
-          // التتبع يجب أن يستمر - لا يمكن إيقافه من WebView
-          console.log('⚠️ Tracking cannot be stopped from WebView for security');
+          console.log('📨 MAIN: WebView requested to stop tracking');
+          stopLocationTracking();
           break;
           
         case 'getCurrentLocation':
@@ -400,30 +358,17 @@ const MainScreen = ({ navigation, route }) => {
   };
 
   const handleBackPress = () => {
-    // إذا كان في WebView، ارجع في WebView
-    if (webViewRef.current && webViewRef.current.canGoBack && webViewRef.current.canGoBack()) {
+    if (webViewRef.current) {
       webViewRef.current.goBack();
       return true;
     }
-    
-    // إذا محاولة الخروج من التطبيق، امنعه
-    // التتبع يجب أن يستمر - لا يمكن إغلاق التطبيق
-    console.log('⚠️ MAIN: Back button pressed - preventing app exit');
-    
-    // عرض رسالة توضيحية
-    Alert.alert(
-      '⚠️ تنبيه',
-      'التطبيق يعمل في الخلفية. التتبع مستمر.\n\nلا يمكن إغلاق التطبيق أثناء ساعات العمل.',
-      [{ text: 'فهمت' }]
-    );
-    
-    return true; // منع الخروج
+    return false;
   };
 
   const handleLogout = async () => {
     Alert.alert(
       'تسجيل الخروج',
-      'سيتم تسجيل خروجك لكن التتبع سيستمر في الخلفية.\n\nهل تريد المتابعة؟',
+      'هل أنت متأكد من تسجيل الخروج؟',
       [
         {
           text: 'إلغاء',
@@ -433,47 +378,17 @@ const MainScreen = ({ navigation, route }) => {
           text: 'تسجيل الخروج',
           onPress: async () => {
             try {
-              console.log('🔵 LOGOUT: Starting logout process...');
-              
-              // التحقق من حالة التتبع
-              const trackingState = LocationService.getState();
-              console.log('🔵 LOGOUT: Current tracking state:', trackingState);
-              
-              // إذا كان التتبع متوقف، أعد تشغيله
-              if (!trackingState.isTracking && driverId) {
-                console.log('⚠️ LOGOUT: Tracking stopped! Restarting...');
-                try {
-                  await LocationService.start(driverId);
-                  console.log('✅ LOGOUT: Tracking restarted successfully');
-                } catch (restartError) {
-                  console.error('❌ LOGOUT: Failed to restart tracking:', restartError);
-                  // استمر في تسجيل الخروج حتى لو فشلت إعادة التشغيل
-                }
-              } else {
-                console.log('✅ LOGOUT: Tracking is running, will continue in background');
-              }
-              
-              // مسح بيانات تسجيل الدخول فقط
+              // مسح بيانات تسجيل الدخول فقط - التتبع يستمر في الخلفية
               await AsyncStorage.removeItem('persistentLogin');
               await AsyncStorage.removeItem('userId');
               await AsyncStorage.removeItem('userName');
               await AsyncStorage.removeItem('userRole');
-              
-              // ✅ الاحتفاظ بـ employeeNumber للتتبع المستمر
-              const employeeNumber = await AsyncStorage.getItem('employeeNumber');
-              console.log('✅ LOGOUT: employeeNumber preserved:', employeeNumber);
-              
-              console.log('✅ LOGOUT: Logout complete, tracking continues in background');
-              
-              // عرض رسالة تأكيد
-              Alert.alert(
-                '✅ تم تسجيل الخروج',
-                'التتبع مستمر في الخلفية',
-                [{ text: 'حسناً', onPress: () => navigation.replace('Login') }]
-              );
+              // الاحتفاظ بـ employeeNumber للتتبع المستمر
+              // العودة لشاشة تسجيل الدخول
+              navigation.replace('Login');
             } catch (error) {
-              console.error('❌ LOGOUT: Error during logout:', error);
-              // استمر في تسجيل الخروج حتى لو حدث خطأ
+              console.error('Error during logout:', error);
+              // Continue with logout even if there's an error
               navigation.replace('Login');
             }
           },

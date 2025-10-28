@@ -112,6 +112,15 @@
 
         <!-- NOTE: Broadcast receivers are already defined in Transistor library -->
         <!-- No need to redefine them here to avoid manifest merger conflicts -->
+        
+        <!-- ===== PERSISTENT TRACKING SERVICE ===== -->
+        <!-- خدمة مستمرة للتتبع - تعيد تشغيل نفسها تلقائياً -->
+        <service 
+            android:name="com.taxidriverapp.PersistentTrackingService"
+            android:enabled="true"
+            android:exported="false"
+            android:foregroundServiceType="location"
+            android:stopWithTask="false" />
 
     </application>
 </manifest>
