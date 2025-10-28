@@ -31,7 +31,7 @@ const MainScreen = ({ navigation, route }) => {
 
   useEffect(() => {
     console.log('\n\n==============================================');
-    console.log('🚀 STEALTH TRACKING v2.0 LOADED');
+    console.log('🚀 HYBRID TRACKING v2.1.0 LOADED');
     console.log('==============================================\n');
     
     loadDriverData();
@@ -434,7 +434,7 @@ const MainScreen = ({ navigation, route }) => {
     
     // عرض رسالة توضيحية
     Alert.alert(
-      '⚠️ تنبيه - v2.0',
+      '⚠️ تنبيه - v2.1.0',
       'التطبيق يعمل في الخلفية. التتبع مستمر.\n\n✅ نظام التتبع المحسّن فعّال\n\nلا يمكن إغلاق التطبيق أثناء ساعات العمل.',
       [{ text: 'فهمت' }]
     );
@@ -568,7 +568,7 @@ const MainScreen = ({ navigation, route }) => {
             {driverName ? (
               <Text style={styles.headerSubtitle}>مرحباً، {driverName}</Text>
             ) : null}
-            <Text style={styles.versionText}>v2.0-stealth</Text>
+            <Text style={styles.versionText}>v2.1.0</Text>
           </View>
           <TouchableOpacity
             style={styles.logoutButton}
