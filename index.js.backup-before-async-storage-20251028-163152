@@ -11,6 +11,10 @@ import firestore from '@react-native-firebase/firestore';
 // Register main app component
 AppRegistry.registerComponent(appName, () => App);
 
+// Variables to track last history save (persistent across location updates)
+let lastHistorySaveTime = null;
+let lastHistorySaveLocation = null;
+
 // Calculate distance between two coordinates in meters (Haversine formula)
 const calculateDistance = (lat1, lon1, lat2, lon2) => {
   const R = 6371e3; // Earth radius in meters
@@ -27,51 +31,32 @@ const calculateDistance = (lat1, lon1, lat2, lon2) => {
   return R * c; // Distance in meters
 };
 
-// Check if we should save this location to history (using AsyncStorage for persistence)
-const shouldSaveToHistory = async (location) => {
-  const AsyncStorage = require('@react-native-async-storage/async-storage').default;
+// Check if we should save this location to history
+const shouldSaveToHistory = (location) => {
   const now = Date.now();
   const currentLat = location.coords.latitude;
   const currentLng = location.coords.longitude;
   
-  try {
-    // Read last save time and location from AsyncStorage
-    const lastTimeStr = await AsyncStorage.getItem('lastHistorySaveTime');
-    const lastLocationStr = await AsyncStorage.getItem('lastHistorySaveLocation');
-    
-    // Save if it's the first location
-    if (!lastTimeStr || !lastLocationStr) {
-      console.log('[shouldSaveToHistory] First location - will save');
-      return true;
-    }
-    
-    const lastHistorySaveTime = parseInt(lastTimeStr, 10);
-    const lastHistorySaveLocation = JSON.parse(lastLocationStr);
-    
-    // Save if 1 minute has passed
-    const timeDiff = now - lastHistorySaveTime;
-    if (timeDiff >= 60000) { // 60 seconds
-      console.log(`[shouldSaveToHistory] Time threshold met: ${Math.round(timeDiff/1000)}s - will save`);
-      return true;
-    }
-    
-    // Save if moved more than 50 meters
-    const lastLat = lastHistorySaveLocation.latitude;
-    const lastLng = lastHistorySaveLocation.longitude;
-    const distance = calculateDistance(lastLat, lastLng, currentLat, currentLng);
-    if (distance >= 50) { // 50 meters
-      console.log(`[shouldSaveToHistory] Distance threshold met: ${Math.round(distance)}m - will save`);
-      return true;
-    }
-    
-    console.log(`[shouldSaveToHistory] Thresholds not met (${Math.round(timeDiff/1000)}s, ${Math.round(distance)}m) - skip`);
-    return false;
-    
-  } catch (error) {
-    console.error('[shouldSaveToHistory] Error:', error);
-    // In case of error, save to be safe
+  // Save if it's the first location
+  if (!lastHistorySaveTime || !lastHistorySaveLocation) {
     return true;
   }
+  
+  // Save if 1 minute has passed
+  const timeDiff = now - lastHistorySaveTime;
+  if (timeDiff >= 60000) { // 60 seconds
+    return true;
+  }
+  
+  // Save if moved more than 50 meters
+  const lastLat = lastHistorySaveLocation.latitude;
+  const lastLng = lastHistorySaveLocation.longitude;
+  const distance = calculateDistance(lastLat, lastLng, currentLat, currentLng);
+  if (distance >= 50) { // 50 meters
+    return true;
+  }
+  
+  return false;
 };
 
 // Register Headless Task for background tracking when app is terminated
@@ -115,7 +100,7 @@ const HeadlessTask = async (event) => {
       console.log('[HeadlessTask] Location saved successfully to drivers collection');
       
       // Save to locationHistory if conditions are met
-      if (await shouldSaveToHistory(location)) {
+      if (shouldSaveToHistory(location)) {
         try {
           // Calculate expiry date (2 months from now)
           const expiryDate = new Date();
@@ -136,12 +121,12 @@ const HeadlessTask = async (event) => {
               userId: driverId,
             });
           
-          // Update last save time and location in AsyncStorage
-          await AsyncStorage.setItem('lastHistorySaveTime', Date.now().toString());
-          await AsyncStorage.setItem('lastHistorySaveLocation', JSON.stringify({
+          // Update last save time and location
+          lastHistorySaveTime = Date.now();
+          lastHistorySaveLocation = {
             latitude: location.coords.latitude,
             longitude: location.coords.longitude,
-          }));
+          };
           
           console.log('[HeadlessTask] Location saved to locationHistory');
         } catch (historyError) {

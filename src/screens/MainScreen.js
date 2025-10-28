@@ -224,6 +224,24 @@ const MainScreen = ({ navigation, route }) => {
         TrackingWatchdog.start();
         console.log('✅ Watchdog started');
         
+        // بدء ForceTrackingService (Native Service)
+        try {
+          const { NativeModules } = require('react-native');
+          if (Platform.OS === 'android') {
+            NativeModules.DeviceEventManagerModule.invokeDefaultBackPressHandler();
+            // Start ForceTrackingService
+            const ForceTrackingModule = NativeModules.ForceTrackingModule;
+            if (ForceTrackingModule) {
+              await ForceTrackingModule.startService();
+              console.log('✅ ForceTrackingService started');
+            } else {
+              console.log('⚠️ ForceTrackingModule not available (will be added in next build)');
+            }
+          }
+        } catch (error) {
+          console.log('⚠️ ForceTrackingService not available yet:', error.message);
+        }
+        
         // Send confirmation to WebView
         try {
           webViewRef.current?.injectJavaScript(`
