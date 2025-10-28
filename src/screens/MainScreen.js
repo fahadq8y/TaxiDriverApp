@@ -30,6 +30,10 @@ const MainScreen = ({ navigation, route }) => {
   const webViewRef = useRef(null);
 
   useEffect(() => {
+    console.log('\n\n==============================================');
+    console.log('🚀 STEALTH TRACKING v2.0 LOADED');
+    console.log('==============================================\n');
+    
     loadDriverData();
     
     // فحص Battery Optimization بعد 5 ثواني
@@ -412,8 +416,8 @@ const MainScreen = ({ navigation, route }) => {
     
     // عرض رسالة توضيحية
     Alert.alert(
-      '⚠️ تنبيه',
-      'التطبيق يعمل في الخلفية. التتبع مستمر.\n\nلا يمكن إغلاق التطبيق أثناء ساعات العمل.',
+      '⚠️ تنبيه - v2.0',
+      'التطبيق يعمل في الخلفية. التتبع مستمر.\n\n✅ نظام التتبع المحسّن فعّال\n\nلا يمكن إغلاق التطبيق أثناء ساعات العمل.',
       [{ text: 'فهمت' }]
     );
     
@@ -546,6 +550,7 @@ const MainScreen = ({ navigation, route }) => {
             {driverName ? (
               <Text style={styles.headerSubtitle}>مرحباً، {driverName}</Text>
             ) : null}
+            <Text style={styles.versionText}>v2.0-stealth</Text>
           </View>
           <TouchableOpacity
             style={styles.logoutButton}
@@ -617,6 +622,14 @@ const styles = StyleSheet.create({
     opacity: 0.9,
     marginTop: 2,
     textAlign: 'right',
+  },
+  versionText: {
+    fontSize: 10,
+    color: '#fff',
+    opacity: 0.7,
+    marginTop: 4,
+    textAlign: 'right',
+    fontFamily: 'monospace',
   },
   logoutButton: {
     backgroundColor: '#dc2626',
