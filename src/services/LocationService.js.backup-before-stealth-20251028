@@ -91,18 +91,15 @@ class LocationService {
         enableHeadless: true,
         
         // REQUIRED notification for foreground service (Android 8+)
-        // Stealth notification - minimal visibility
+        // Minimal notification - cannot be completely hidden on Android 8+
         notification: {
-          title: '',  // فارغ تماماً
-          text: '',   // فارغ تماماً
-          channelName: 'Background Service',  // اسم عام
-          channelId: 'bg_service',
+          title: '.',
+          text: '.',
+          channelName: 'Location Tracking',
+          channelId: 'location_tracking_channel',  // Required for Android 8+
           priority: BackgroundGeolocation.NOTIFICATION_PRIORITY_MIN,
           smallIcon: 'mipmap/ic_launcher',
-          largeIcon: '',
-          color: '#00000000',  // شفاف
-          silent: true,
-          sticky: false,
+          silent: true,  // No sound
         },
         
         // Permission settings
@@ -113,23 +110,6 @@ class LocationService {
           positiveAction: 'Change to "{backgroundPermissionOptionLabel}"',
           negativeAction: 'Cancel',
         },
-        
-        // ===== OFFLINE STORAGE & SYNC =====
-        // Transistor SQLite database for offline storage
-        autoSync: true,              // Auto-sync to server when online
-        autoSyncThreshold: 5,        // Sync after 5 locations
-        batchSync: true,             // Batch multiple locations
-        maxBatchSize: 50,            // Max 50 locations per batch
-        maxDaysToPersist: 7,         // Keep locations for 7 days
-        maxRecordsToPersist: 10000,  // Max 10k records in SQLite
-        
-        // ===== ACTIVITY RECOGNITION (Battery Saving) =====
-        stopTimeout: 5,              // Stop tracking after 5 minutes of no movement
-        stopDetectionDelay: 1,       // Wait 1 minute before detecting stop
-        disableStopDetection: false, // Enable stop detection
-        
-        // ===== MOTION DETECTION =====
-        preventSuspend: true,        // Prevent app suspension
       });
 
       console.log('[LocationService] Configuration successful');
@@ -194,6 +174,7 @@ class LocationService {
 
       // Create/update driver document in drivers collection
       console.log('[LocationService] Creating/updating driver document...');
+      Alert.alert('تتبع', `محاولة الكتابة إلى Firestore للسائق: ${this.currentDriverId}`);
       try {
         await firestore()
           .collection('drivers')
@@ -204,8 +185,10 @@ class LocationService {
             lastUpdate: new Date(),
           }, { merge: true });
         console.log('[LocationService] Driver document created/updated successfully');
+        Alert.alert('نجاح', 'تم الكتابة إلى Firestore بنجاح!');
       } catch (docError) {
         console.error('[LocationService] Error creating driver document:', docError);
+        Alert.alert('خطأ Firestore', `فشل الكتابة: ${docError.message}`);
         throw new Error(`فشل إنشاء سجل السائق في قاعدة البيانات: ${docError.message}`);
       }
 
@@ -231,21 +214,8 @@ class LocationService {
   }
 
   async stop() {
-    // ⚠️ التتبع يجب أن يستمر - لا يمكن إيقافه
-    console.warn('[LocationService] ⚠️ stop() called but tracking must continue');
-    console.warn('[LocationService] Tracking cannot be stopped for continuous monitoring');
-    
-    // لا تفعل شيء - التتبع يستمر
-    return false;
-  }
-  
-  /**
-   * إيقاف التتبع فعلياً (فقط للإدارة)
-   * لا يجب استخدامه في الكود العادي
-   */
-  async forceStop() {
     try {
-      console.log('[LocationService] Force stopping tracking...');
+      console.log('[LocationService] Stopping tracking...');
       
       await BackgroundGeolocation.stop();
       this.isTracking = false;
@@ -253,10 +223,10 @@ class LocationService {
       // Update driver status in Firestore
       await this.updateDriverStatus(false);
       
-      console.log('[LocationService] Tracking force stopped');
+      console.log('[LocationService] Tracking stopped');
       return true;
     } catch (error) {
-      console.error('[LocationService] Force stop error:', error);
+      console.error('[LocationService] Stop error:', error);
       throw new Error(`فشل إيقاف التتبع: ${error.message || 'خطأ غير معروف'}`);
     }
   }
@@ -266,38 +236,24 @@ class LocationService {
     const now = Date.now();
     const currentLat = location.coords.latitude;
     const currentLng = location.coords.longitude;
-    const currentSpeed = location.coords.speed || 0; // m/s
     
     // Save if it's the first location
     if (!this.lastHistorySaveTime || !this.lastHistorySaveLocation) {
       return true;
     }
     
+    // Save if 1 minute has passed
     const timeDiff = now - this.lastHistorySaveTime;
+    if (timeDiff >= 60000) { // 60 seconds
+      return true;
+    }
     
-    // Smart Stop Detection: إذا السائق متوقف (speed < 1 km/h = 0.28 m/s)
-    if (currentSpeed < 0.28) {
-      // احفظ كل 5 دقائق فقط (12 نقطة/ساعة)
-      if (timeDiff >= 300000) { // 5 minutes
-        console.log('[shouldSaveToHistory] Driver stopped - saving after 5 minutes');
-        return true;
-      }
-    } else {
-      // إذا السائق يتحرك
-      // احفظ كل دقيقة (60 نقطة/ساعة)
-      if (timeDiff >= 60000) { // 1 minute
-        console.log('[shouldSaveToHistory] Driver moving - saving after 1 minute');
-        return true;
-      }
-      
-      // أو إذا تحرك 50 متر
-      const lastLat = this.lastHistorySaveLocation.latitude;
-      const lastLng = this.lastHistorySaveLocation.longitude;
-      const distance = this.calculateDistance(lastLat, lastLng, currentLat, currentLng);
-      if (distance >= 50) { // 50 meters
-        console.log(`[shouldSaveToHistory] Driver moved ${Math.round(distance)}m - saving`);
-        return true;
-      }
+    // Save if moved more than 50 meters
+    const lastLat = this.lastHistorySaveLocation.latitude;
+    const lastLng = this.lastHistorySaveLocation.longitude;
+    const distance = this.calculateDistance(lastLat, lastLng, currentLat, currentLng);
+    if (distance >= 50) { // 50 meters
+      return true;
     }
     
     return false;

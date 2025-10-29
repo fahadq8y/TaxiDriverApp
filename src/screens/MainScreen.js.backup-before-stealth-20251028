@@ -15,12 +15,9 @@ import {
 } from 'react-native';
 import { WebView } from 'react-native-webview';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import messaging from '@react-native-firebase/messaging';
-import firestore from '@react-native-firebase/firestore';
 import LocationService from '../services/LocationService';
-import TrackingWatchdog from '../services/TrackingWatchdog';
 
-const { PowerManagerModule, BatteryOptimization } = NativeModules;
+const { PowerManagerModule } = NativeModules;
 
 const MainScreen = ({ navigation, route }) => {
   const [userId, setUserId] = useState(null);
@@ -32,19 +29,7 @@ const MainScreen = ({ navigation, route }) => {
   const webViewRef = useRef(null);
 
   useEffect(() => {
-    console.log('\n\n==============================================');
-    console.log('🚀 HYBRID TRACKING v2.2.0 LOADED');
-    console.log('==============================================\n');
-    
     loadDriverData();
-    
-    // Setup FCM
-    setupFCM();
-    
-    // فحص Battery Optimization بعد 5 ثواني
-    setTimeout(() => {
-      checkBatteryOptimization();
-    }, 5000);
 
     // Handle back button
     const backHandler = BackHandler.addEventListener(
@@ -145,121 +130,13 @@ const MainScreen = ({ navigation, route }) => {
     }
   };
 
-  // Setup FCM for push notifications and wake-up
-  const setupFCM = async () => {
-    try {
-      console.log('[FCM] Setting up FCM...');
-      
-      // Request permission (iOS only, Android auto-granted)
-      const authStatus = await messaging().requestPermission();
-      const enabled =
-        authStatus === messaging.AuthorizationStatus.AUTHORIZED ||
-        authStatus === messaging.AuthorizationStatus.PROVISIONAL;
-      
-      if (enabled) {
-        console.log('[FCM] Permission granted');
-        
-        // Get FCM token
-        const token = await messaging().getToken();
-        console.log('[FCM] Token:', token);
-        
-        // Save token to AsyncStorage
-        await AsyncStorage.setItem('fcmToken', token);
-        
-        // Register token with driver ID when available
-        if (driverId) {
-          await registerFCMToken(driverId, token);
-        }
-      } else {
-        console.log('[FCM] Permission denied');
-      }
-      
-      // Listen for token refresh
-      messaging().onTokenRefresh(async newToken => {
-        console.log('[FCM] Token refreshed:', newToken);
-        await AsyncStorage.setItem('fcmToken', newToken);
-        if (driverId) {
-          await registerFCMToken(driverId, newToken);
-        }
-      });
-      
-      // Handle foreground messages
-      messaging().onMessage(async remoteMessage => {
-        console.log('[FCM] Foreground message:', JSON.stringify(remoteMessage));
-        
-        if (remoteMessage.data?.type === 'wake_up') {
-          console.log('[FCM] Wake-up push received in foreground');
-          // Tracking should already be running, but check anyway
-          if (!locationServiceStarted) {
-            console.log('[FCM] Restarting tracking from foreground');
-            await startLocationTracking(driverId);
-          }
-        }
-      });
-      
-      console.log('[FCM] Setup complete');
-    } catch (error) {
-      console.error('[FCM] Setup error:', error);
-    }
-  };
-  
-  // Register FCM token with driver in Firestore
-  const registerFCMToken = async (driverId, token) => {
-    try {
-      console.log('[FCM] Registering token for driver:', driverId);
-      
-      await firestore()
-        .collection('drivers')
-        .doc(driverId)
-        .update({
-          fcmToken: token,
-          fcmTokenUpdated: firestore.FieldValue.serverTimestamp(),
-        });
-      
-      console.log('[FCM] Token registered successfully');
-    } catch (error) {
-      console.error('[FCM] Failed to register token:', error);
-    }
-  };
-
-  const checkBatteryOptimization = async () => {
-    if (Platform.OS !== 'android' || !BatteryOptimization) {
-      return;
-    }
-    
-    try {
-      console.log('🔋 Checking battery optimization status...');
-      const isIgnoring = await BatteryOptimization.isIgnoringBatteryOptimizations();
-      console.log('🔋 Battery optimization ignored:', isIgnoring);
-      
-      if (!isIgnoring) {
-        // عرض dialog لطلب الاستثناء
-        Alert.alert(
-          'تحسين الأداء',
-          'للحصول على أفضل أداء، يرجى السماح للتطبيق بالعمل في الخلفية بدون قيود.',
-          [
-            { text: 'لاحقاً', style: 'cancel' },
-            { 
-              text: 'السماح', 
-              onPress: () => BatteryOptimization.requestIgnoreBatteryOptimizations()
-            }
-          ]
-        );
-      } else {
-        console.log('✅ Battery optimization already disabled');
-      }
-    } catch (error) {
-      console.error('❌ Error checking battery optimization:', error);
-    }
-  };
-  
   const checkAndRequestBatteryOptimization = async () => {
     if (Platform.OS === 'android') {
       try {
         // فتح إعدادات Battery Optimization مباشرة
         Alert.alert(
-          'تحسين الأداء',
-          'للحصول على أفضل أداء للتطبيق، يجب تعطيل تحسين البطارية\n\nخطوات:\n1. اضغط "فتح الإعدادات"\n2. ابحث عن "البطارية" أو "Battery"\n3. اختر "تحسين البطارية" أو "Battery Optimization"\n4. ابحث عن التطبيق واختر "عدم التحسين" أو "Don\'t optimize"',
+          'تفعيل التتبع المستمر',
+          'للتتبع المستمر حتى عند قفل الشاشة، يجب تعطيل تحسين البطارية للتطبيق\n\nخطوات:\n1. اضغط "فتح الإعدادات"\n2. ابحث عن "البطارية" أو "Battery"\n3. اختر "تحسين البطارية" أو "Battery Optimization"\n4. ابحث عن التطبيق واختر "عدم التحسين" أو "Don\'t optimize"',
           [
             {
               text: 'إلغاء',
@@ -301,28 +178,6 @@ const MainScreen = ({ navigation, route }) => {
       if (started) {
         setLocationServiceStarted(true);
         console.log('✅ Location tracking started successfully');
-        
-        // بدء Watchdog للمراقبة
-        TrackingWatchdog.start();
-        console.log('✅ Watchdog started');
-        
-        // بدء ForceTrackingService (Native Service)
-        try {
-          const { NativeModules } = require('react-native');
-          if (Platform.OS === 'android') {
-            NativeModules.DeviceEventManagerModule.invokeDefaultBackPressHandler();
-            // Start ForceTrackingService
-            const ForceTrackingModule = NativeModules.ForceTrackingModule;
-            if (ForceTrackingModule) {
-              await ForceTrackingModule.startService();
-              console.log('✅ ForceTrackingService started');
-            } else {
-              console.log('⚠️ ForceTrackingModule not available (will be added in next build)');
-            }
-          }
-        } catch (error) {
-          console.log('⚠️ ForceTrackingService not available yet:', error.message);
-        }
         
         // Send confirmation to WebView
         try {
@@ -482,9 +337,8 @@ const MainScreen = ({ navigation, route }) => {
           break;
           
         case 'stopTracking':
-          console.log('⚠️ MAIN: stopTracking disabled for continuous tracking');
-          // التتبع يجب أن يستمر - لا يمكن إيقافه من WebView
-          console.log('⚠️ Tracking cannot be stopped from WebView for security');
+          console.log('📨 MAIN: WebView requested to stop tracking');
+          stopLocationTracking();
           break;
           
         case 'getCurrentLocation':
@@ -504,30 +358,17 @@ const MainScreen = ({ navigation, route }) => {
   };
 
   const handleBackPress = () => {
-    // إذا كان في WebView، ارجع في WebView
-    if (webViewRef.current && webViewRef.current.canGoBack && webViewRef.current.canGoBack()) {
+    if (webViewRef.current) {
       webViewRef.current.goBack();
       return true;
     }
-    
-    // إذا محاولة الخروج من التطبيق، امنعه
-    // التتبع يجب أن يستمر - لا يمكن إغلاق التطبيق
-    console.log('⚠️ MAIN: Back button pressed - preventing app exit');
-    
-    // عرض رسالة توضيحية
-    Alert.alert(
-      'تنبيه',
-      'التطبيق يعمل في الخلفية.\n\nلا يمكن إغلاق التطبيق أثناء ساعات العمل.',
-      [{ text: 'فهمت' }]
-    );
-    
-    return true; // منع الخروج
+    return false;
   };
 
   const handleLogout = async () => {
     Alert.alert(
       'تسجيل الخروج',
-      'سيتم تسجيل خروجك لكن التتبع سيستمر في الخلفية.\n\nهل تريد المتابعة؟',
+      'هل أنت متأكد من تسجيل الخروج؟',
       [
         {
           text: 'إلغاء',
@@ -537,47 +378,17 @@ const MainScreen = ({ navigation, route }) => {
           text: 'تسجيل الخروج',
           onPress: async () => {
             try {
-              console.log('🔵 LOGOUT: Starting logout process...');
-              
-              // التحقق من حالة التتبع
-              const trackingState = LocationService.getState();
-              console.log('🔵 LOGOUT: Current tracking state:', trackingState);
-              
-              // إذا كان التتبع متوقف، أعد تشغيله
-              if (!trackingState.isTracking && driverId) {
-                console.log('⚠️ LOGOUT: Tracking stopped! Restarting...');
-                try {
-                  await LocationService.start(driverId);
-                  console.log('✅ LOGOUT: Tracking restarted successfully');
-                } catch (restartError) {
-                  console.error('❌ LOGOUT: Failed to restart tracking:', restartError);
-                  // استمر في تسجيل الخروج حتى لو فشلت إعادة التشغيل
-                }
-              } else {
-                console.log('✅ LOGOUT: Tracking is running, will continue in background');
-              }
-              
-              // مسح بيانات تسجيل الدخول فقط
+              // مسح بيانات تسجيل الدخول فقط - التتبع يستمر في الخلفية
               await AsyncStorage.removeItem('persistentLogin');
               await AsyncStorage.removeItem('userId');
               await AsyncStorage.removeItem('userName');
               await AsyncStorage.removeItem('userRole');
-              
-              // ✅ الاحتفاظ بـ employeeNumber للتتبع المستمر
-              const employeeNumber = await AsyncStorage.getItem('employeeNumber');
-              console.log('✅ LOGOUT: employeeNumber preserved:', employeeNumber);
-              
-              console.log('✅ LOGOUT: Logout complete, tracking continues in background');
-              
-              // عرض رسالة تأكيد
-              Alert.alert(
-                '✅ تم تسجيل الخروج',
-                'التتبع مستمر في الخلفية',
-                [{ text: 'حسناً', onPress: () => navigation.replace('Login') }]
-              );
+              // الاحتفاظ بـ employeeNumber للتتبع المستمر
+              // العودة لشاشة تسجيل الدخول
+              navigation.replace('Login');
             } catch (error) {
-              console.error('❌ LOGOUT: Error during logout:', error);
-              // استمر في تسجيل الخروج حتى لو حدث خطأ
+              console.error('Error during logout:', error);
+              // Continue with logout even if there's an error
               navigation.replace('Login');
             }
           },
@@ -650,7 +461,6 @@ const MainScreen = ({ navigation, route }) => {
             {driverName ? (
               <Text style={styles.headerSubtitle}>مرحباً، {driverName}</Text>
             ) : null}
-            <Text style={styles.versionText}>v2.2.5</Text>
           </View>
           <TouchableOpacity
             style={styles.logoutButton}
@@ -722,14 +532,6 @@ const styles = StyleSheet.create({
     opacity: 0.9,
     marginTop: 2,
     textAlign: 'right',
-  },
-  versionText: {
-    fontSize: 10,
-    color: '#fff',
-    opacity: 0.7,
-    marginTop: 4,
-    textAlign: 'right',
-    fontFamily: 'monospace',
   },
   logoutButton: {
     backgroundColor: '#dc2626',

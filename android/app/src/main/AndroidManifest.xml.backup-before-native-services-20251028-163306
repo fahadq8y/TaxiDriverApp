@@ -113,31 +113,14 @@
         <!-- NOTE: Broadcast receivers are already defined in Transistor library -->
         <!-- No need to redefine them here to avoid manifest merger conflicts -->
         
-        <!-- ===== FORCE TRACKING SERVICE ===== -->
-        <!-- خدمة قوية لضمان استمرار التتبع -->
+        <!-- ===== PERSISTENT TRACKING SERVICE ===== -->
+        <!-- خدمة مستمرة للتتبع - تعيد تشغيل نفسها تلقائياً -->
         <service 
-            android:name=".ForceTrackingService"
+            android:name="com.taxidriverapp.PersistentTrackingService"
             android:enabled="true"
             android:exported="false"
             android:foregroundServiceType="location"
             android:stopWithTask="false" />
-
-        <!-- ===== BOOT RECEIVER ===== -->
-        <!-- يبدأ التتبع تلقائياً بعد إعادة تشغيل الجهاز -->
-        <receiver 
-            android:name=".AbsoluteBootReceiver"
-            android:enabled="true"
-            android:exported="true">
-            <intent-filter android:priority="1000">
-                <action android:name="android.intent.action.BOOT_COMPLETED" />
-                <action android:name="android.intent.action.MY_PACKAGE_REPLACED" />
-                <action android:name="android.intent.action.QUICKBOOT_POWERON" />
-            </intent-filter>
-        </receiver>
-
-        <!-- ===== SERVICE CHECK RECEIVER ===== -->
-        <!-- يفحص الخدمة كل دقيقة -->
-        <receiver android:name=".ForceTrackingService$ServiceCheckReceiver" />
 
     </application>
 </manifest>
