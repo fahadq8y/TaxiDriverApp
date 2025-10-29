@@ -7,7 +7,6 @@ import App from './App';
 import { name as appName } from './app.json';
 import BackgroundGeolocation from 'react-native-background-geolocation';
 import firestore from '@react-native-firebase/firestore';
-import messaging from '@react-native-firebase/messaging';
 
 // Register main app component
 AppRegistry.registerComponent(appName, () => App);
@@ -161,61 +160,4 @@ const HeadlessTask = async (event) => {
 
 // Register the headless task
 BackgroundGeolocation.registerHeadlessTask(HeadlessTask);
-
-// ===== FCM BACKGROUND MESSAGE HANDLER =====
-// This handler is called when the app receives a push notification while in background/killed state
-messaging().setBackgroundMessageHandler(async remoteMessage => {
-  console.log('[FCM] Background message received:', JSON.stringify(remoteMessage));
-  
-  try {
-    if (remoteMessage.data?.type === 'wake_up') {
-      console.log('[FCM] Wake-up push received - attempting to restart tracking');
-      
-      // Get driver ID from message or AsyncStorage
-      const AsyncStorage = require('@react-native-async-storage/async-storage').default;
-      const driverId = remoteMessage.data.driverId || await AsyncStorage.getItem('currentDriverId');
-      
-      if (driverId) {
-        console.log('[FCM] Driver ID:', driverId);
-        
-        // Try to restart BackgroundGeolocation
-        try {
-          const state = await BackgroundGeolocation.start();
-          console.log('[FCM] BackgroundGeolocation restarted successfully:', state);
-          
-          // Log restart event to Firebase
-          await firestore()
-            .collection('tracking_events')
-            .add({
-              type: 'fcm_restart',
-              driverId: driverId,
-              timestamp: firestore.FieldValue.serverTimestamp(),
-              success: true,
-            });
-        } catch (bgError) {
-          console.error('[FCM] Failed to restart BackgroundGeolocation:', bgError);
-          
-          // Log failure
-          await firestore()
-            .collection('tracking_events')
-            .add({
-              type: 'fcm_restart',
-              driverId: driverId,
-              timestamp: firestore.FieldValue.serverTimestamp(),
-              success: false,
-              error: bgError.message,
-            });
-        }
-      } else {
-        console.warn('[FCM] No driver ID found - cannot restart tracking');
-      }
-    }
-  } catch (error) {
-    console.error('[FCM] Error handling background message:', error);
-  }
-  
-  return Promise.resolve();
-});
-
-console.log('[FCM] Background message handler registered');
 

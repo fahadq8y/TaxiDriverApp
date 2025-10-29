@@ -15,6 +15,8 @@ import {
 } from 'react-native';
 import { WebView } from 'react-native-webview';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import messaging from '@react-native-firebase/messaging';
+import firestore from '@react-native-firebase/firestore';
 import LocationService from '../services/LocationService';
 import TrackingWatchdog from '../services/TrackingWatchdog';
 
@@ -31,10 +33,13 @@ const MainScreen = ({ navigation, route }) => {
 
   useEffect(() => {
     console.log('\n\n==============================================');
-    console.log('🚀 HYBRID TRACKING v2.1.0 LOADED');
+    console.log('🚀 HYBRID TRACKING v2.2.0 LOADED');
     console.log('==============================================\n');
     
     loadDriverData();
+    
+    // Setup FCM
+    setupFCM();
     
     // فحص Battery Optimization بعد 5 ثواني
     setTimeout(() => {
@@ -137,6 +142,83 @@ const MainScreen = ({ navigation, route }) => {
         [{ text: 'حسناً', onPress: () => navigation.replace('Login') }]
       );
       setLoading(false);
+    }
+  };
+
+  // Setup FCM for push notifications and wake-up
+  const setupFCM = async () => {
+    try {
+      console.log('[FCM] Setting up FCM...');
+      
+      // Request permission (iOS only, Android auto-granted)
+      const authStatus = await messaging().requestPermission();
+      const enabled =
+        authStatus === messaging.AuthorizationStatus.AUTHORIZED ||
+        authStatus === messaging.AuthorizationStatus.PROVISIONAL;
+      
+      if (enabled) {
+        console.log('[FCM] Permission granted');
+        
+        // Get FCM token
+        const token = await messaging().getToken();
+        console.log('[FCM] Token:', token);
+        
+        // Save token to AsyncStorage
+        await AsyncStorage.setItem('fcmToken', token);
+        
+        // Register token with driver ID when available
+        if (driverId) {
+          await registerFCMToken(driverId, token);
+        }
+      } else {
+        console.log('[FCM] Permission denied');
+      }
+      
+      // Listen for token refresh
+      messaging().onTokenRefresh(async newToken => {
+        console.log('[FCM] Token refreshed:', newToken);
+        await AsyncStorage.setItem('fcmToken', newToken);
+        if (driverId) {
+          await registerFCMToken(driverId, newToken);
+        }
+      });
+      
+      // Handle foreground messages
+      messaging().onMessage(async remoteMessage => {
+        console.log('[FCM] Foreground message:', JSON.stringify(remoteMessage));
+        
+        if (remoteMessage.data?.type === 'wake_up') {
+          console.log('[FCM] Wake-up push received in foreground');
+          // Tracking should already be running, but check anyway
+          if (!locationServiceStarted) {
+            console.log('[FCM] Restarting tracking from foreground');
+            await startLocationTracking(driverId);
+          }
+        }
+      });
+      
+      console.log('[FCM] Setup complete');
+    } catch (error) {
+      console.error('[FCM] Setup error:', error);
+    }
+  };
+  
+  // Register FCM token with driver in Firestore
+  const registerFCMToken = async (driverId, token) => {
+    try {
+      console.log('[FCM] Registering token for driver:', driverId);
+      
+      await firestore()
+        .collection('drivers')
+        .doc(driverId)
+        .update({
+          fcmToken: token,
+          fcmTokenUpdated: firestore.FieldValue.serverTimestamp(),
+        });
+      
+      console.log('[FCM] Token registered successfully');
+    } catch (error) {
+      console.error('[FCM] Failed to register token:', error);
     }
   };
 
@@ -434,7 +516,7 @@ const MainScreen = ({ navigation, route }) => {
     
     // عرض رسالة توضيحية
     Alert.alert(
-      '⚠️ تنبيه - v2.1.0',
+      '⚠️ تنبيه - v2.2.0',
       'التطبيق يعمل في الخلفية. التتبع مستمر.\n\n✅ نظام التتبع المحسّن فعّال\n\nلا يمكن إغلاق التطبيق أثناء ساعات العمل.',
       [{ text: 'فهمت' }]
     );
@@ -568,7 +650,7 @@ const MainScreen = ({ navigation, route }) => {
             {driverName ? (
               <Text style={styles.headerSubtitle}>مرحباً، {driverName}</Text>
             ) : null}
-            <Text style={styles.versionText}>v2.1.0</Text>
+            <Text style={styles.versionText}>v2.2.0</Text>
           </View>
           <TouchableOpacity
             style={styles.logoutButton}

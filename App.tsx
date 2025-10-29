@@ -3,8 +3,18 @@ import { StatusBar, View, ActivityIndicator } from 'react-native';
 import { NavigationContainer } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import firestore from '@react-native-firebase/firestore';
 import LoginScreen from './src/screens/LoginScreen';
 import MainScreen from './src/screens/MainScreen';
+
+// ===== FIRESTORE OFFLINE PERSISTENCE =====
+// Enable offline data persistence
+firestore().settings({
+  persistence: true,
+  cacheSizeBytes: firestore.CACHE_SIZE_UNLIMITED,
+});
+
+console.log('[Firestore] Offline persistence enabled');
 
 const Stack = createNativeStackNavigator();
 

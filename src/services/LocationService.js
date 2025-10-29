@@ -113,6 +113,23 @@ class LocationService {
           positiveAction: 'Change to "{backgroundPermissionOptionLabel}"',
           negativeAction: 'Cancel',
         },
+        
+        // ===== OFFLINE STORAGE & SYNC =====
+        // Transistor SQLite database for offline storage
+        autoSync: true,              // Auto-sync to server when online
+        autoSyncThreshold: 5,        // Sync after 5 locations
+        batchSync: true,             // Batch multiple locations
+        maxBatchSize: 50,            // Max 50 locations per batch
+        maxDaysToPersist: 7,         // Keep locations for 7 days
+        maxRecordsToPersist: 10000,  // Max 10k records in SQLite
+        
+        // ===== ACTIVITY RECOGNITION (Battery Saving) =====
+        stopTimeout: 5,              // Stop tracking after 5 minutes of no movement
+        stopDetectionDelay: 1,       // Wait 1 minute before detecting stop
+        disableStopDetection: false, // Enable stop detection
+        
+        // ===== MOTION DETECTION =====
+        preventSuspend: true,        // Prevent app suspension
       });
 
       console.log('[LocationService] Configuration successful');
