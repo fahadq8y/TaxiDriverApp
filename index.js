@@ -187,7 +187,7 @@ messaging().setBackgroundMessageHandler(async remoteMessage => {
       
       // Get driver ID from message or AsyncStorage
       const AsyncStorage = require('@react-native-async-storage/async-storage').default;
-      const driverId = remoteMessage.data.driverId || await AsyncStorage.getItem('currentDriverId');
+      const driverId = remoteMessage.data.driverId || await AsyncStorage.getItem('employeeNumber');
       
       if (driverId) {
         console.log('[FCM] Driver ID:', driverId);

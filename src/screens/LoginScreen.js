@@ -21,6 +21,27 @@ const LoginScreen = ({ navigation }) => {
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
 
+  // دالة مساعدة لمتابعة تسجيل الدخول
+  const continueLogin = async (userId, userName, employeeNumber) => {
+    try {
+      await AsyncStorage.setItem('userId', userId);
+      await AsyncStorage.setItem('userName', userName);
+      await AsyncStorage.setItem('employeeNumber', employeeNumber);
+      await AsyncStorage.setItem('userRole', 'driver');
+      await AsyncStorage.setItem('persistentLogin', 'true');
+      
+      const savedEmployeeNumber = await AsyncStorage.getItem('employeeNumber');
+      console.log('✅ LOGIN: employeeNumber saved successfully:', savedEmployeeNumber);
+
+      setLoading(false);
+      navigation.replace('Main');
+    } catch (storageError) {
+      console.error('❌ LOGIN: AsyncStorage error:', storageError);
+      Alert.alert('خطأ', 'فشل حفظ بيانات تسجيل الدخول: ' + storageError.message);
+      setLoading(false);
+    }
+  };
+
   const handleLogin = async () => {
     if (!username || !password) {
       Alert.alert('خطأ', 'الرجاء إدخال اسم المستخدم وكلمة المرور');
@@ -84,24 +105,50 @@ const LoginScreen = ({ navigation }) => {
         return;
       }
       
-      try {
-        await AsyncStorage.setItem('userId', userId);
-        await AsyncStorage.setItem('userName', userName);
-        await AsyncStorage.setItem('employeeNumber', employeeNumber); // حفظ الرقم الوظيفي
-        await AsyncStorage.setItem('userRole', 'driver');
-        await AsyncStorage.setItem('persistentLogin', 'true'); // حفظ حالة تسجيل الدخول الدائم
+      // حماية من تغيير السائق
+      const activeDriverId = await AsyncStorage.getItem('employeeNumber');
+      
+      if (activeDriverId && activeDriverId !== employeeNumber) {
+        console.log('⚠️ LOGIN: Different driver detected:', activeDriverId, 'vs', employeeNumber);
         
-        // التحقق من الحفظ
-        const savedEmployeeNumber = await AsyncStorage.getItem('employeeNumber');
-        console.log('✅ LOGIN: employeeNumber saved successfully:', savedEmployeeNumber);
-
-        setLoading(false);
-        navigation.replace('Main');
-      } catch (storageError) {
-        console.error('❌ LOGIN: AsyncStorage error:', storageError);
-        Alert.alert('خطأ', 'فشل حفظ بيانات تسجيل الدخول: ' + storageError.message);
-        setLoading(false);
+        // عرض رسالة تنبيه
+        Alert.alert(
+          'تنبيه',
+          'يوجد سائق آخر مسجل دخوله على هذا الجهاز.\n\nهل تريد تسجيل الدخول بحسابك؟',
+          [
+            {
+              text: 'إلغاء',
+              style: 'cancel',
+              onPress: () => {
+                setLoading(false);
+              }
+            },
+            {
+              text: 'نعم',
+              onPress: async () => {
+                try {
+                  // إيقاف الخدمات القديمة
+                  console.log('⚠️ LOGIN: Stopping old services...');
+                  const LocationService = require('../services/LocationService').default;
+                  await LocationService.stop();
+                  console.log('✅ LOGIN: Old services stopped');
+                  
+                  // متابعة تسجيل الدخول
+                  await continueLogin(userId, userName, employeeNumber);
+                } catch (stopError) {
+                  console.error('❌ LOGIN: Error stopping old services:', stopError);
+                  // متابعة تسجيل الدخول حتى لو فشل الإيقاف
+                  await continueLogin(userId, userName, employeeNumber);
+                }
+              }
+            }
+          ]
+        );
+        return;
       }
+      
+      // متابعة تسجيل الدخول للسائق نفسه أو الأول
+      await continueLogin(userId, userName, employeeNumber);
     } catch (error) {
       console.error('Login error:', error);
       Alert.alert('خطأ', 'حدث خطأ أثناء تسجيل الدخول');

@@ -527,7 +527,7 @@ const MainScreen = ({ navigation, route }) => {
   const handleLogout = async () => {
     Alert.alert(
       'تسجيل الخروج',
-      'سيتم تسجيل خروجك لكن التتبع سيستمر في الخلفية.\n\nهل تريد المتابعة؟',
+      'هل أنت متأكد من تسجيل الخروج؟',
       [
         {
           text: 'إلغاء',
@@ -554,7 +554,7 @@ const MainScreen = ({ navigation, route }) => {
                   // استمر في تسجيل الخروج حتى لو فشلت إعادة التشغيل
                 }
               } else {
-                console.log('✅ LOGOUT: Tracking is running, will continue in background');
+                console.log('✅ LOGOUT: Services are running');
               }
               
               // مسح بيانات تسجيل الدخول فقط
@@ -567,12 +567,12 @@ const MainScreen = ({ navigation, route }) => {
               const employeeNumber = await AsyncStorage.getItem('employeeNumber');
               console.log('✅ LOGOUT: employeeNumber preserved:', employeeNumber);
               
-              console.log('✅ LOGOUT: Logout complete, tracking continues in background');
+              console.log('✅ LOGOUT: Logout complete');
               
               // عرض رسالة تأكيد
               Alert.alert(
-                '✅ تم تسجيل الخروج',
-                'التتبع مستمر في الخلفية',
+                'تم تسجيل الخروج',
+                'تم تسجيل خروجك بنجاح',
                 [{ text: 'حسناً', onPress: () => navigation.replace('Login') }]
               );
             } catch (error) {
