@@ -16,6 +16,8 @@ import {
 import { WebView } from 'react-native-webview';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import LocationService from '../services/LocationService';
+import messaging from '@react-native-firebase/messaging';
+import firestore from '@react-native-firebase/firestore';
 
 const { PowerManagerModule } = NativeModules;
 
@@ -178,6 +180,26 @@ const MainScreen = ({ navigation, route }) => {
       if (started) {
         setLocationServiceStarted(true);
         console.log('✅ Location tracking started successfully');
+        
+        // Register FCM Token
+        try {
+          console.log('📱 Registering FCM token...');
+          const fcmToken = await messaging().getToken();
+          console.log('📱 FCM Token:', fcmToken.substring(0, 50) + '...');
+          
+          // Save to Firestore
+          await firestore()
+            .collection('drivers')
+            .doc(currentDriverId)
+            .update({
+              fcmToken: fcmToken,
+              fcmTokenUpdated: firestore.FieldValue.serverTimestamp()
+            });
+          
+          console.log('✅ FCM Token registered successfully');
+        } catch (fcmError) {
+          console.error('❌ FCM Token registration failed:', fcmError);
+        }
         
         // Send confirmation to WebView
         try {
