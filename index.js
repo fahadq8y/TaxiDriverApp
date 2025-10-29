@@ -29,11 +29,13 @@ const calculateDistance = (lat1, lon1, lat2, lon2) => {
 };
 
 // Check if we should save this location to history (using AsyncStorage for persistence)
+// Smart Stop Detection: يحفظ بشكل أقل عندما السائق متوقف
 const shouldSaveToHistory = async (location) => {
   const AsyncStorage = require('@react-native-async-storage/async-storage').default;
   const now = Date.now();
   const currentLat = location.coords.latitude;
   const currentLng = location.coords.longitude;
+  const currentSpeed = location.coords.speed || 0; // m/s
   
   try {
     // Read last save time and location from AsyncStorage
@@ -48,25 +50,37 @@ const shouldSaveToHistory = async (location) => {
     
     const lastHistorySaveTime = parseInt(lastTimeStr, 10);
     const lastHistorySaveLocation = JSON.parse(lastLocationStr);
-    
-    // Save if 1 minute has passed
     const timeDiff = now - lastHistorySaveTime;
-    if (timeDiff >= 60000) { // 60 seconds
-      console.log(`[shouldSaveToHistory] Time threshold met: ${Math.round(timeDiff/1000)}s - will save`);
-      return true;
-    }
     
-    // Save if moved more than 50 meters
-    const lastLat = lastHistorySaveLocation.latitude;
-    const lastLng = lastHistorySaveLocation.longitude;
-    const distance = calculateDistance(lastLat, lastLng, currentLat, currentLng);
-    if (distance >= 50) { // 50 meters
-      console.log(`[shouldSaveToHistory] Distance threshold met: ${Math.round(distance)}m - will save`);
-      return true;
+    // Smart Stop Detection: إذا السائق متوقف (speed < 1 km/h = 0.28 m/s)
+    if (currentSpeed < 0.28) {
+      // احفظ كل 5 دقائق فقط (12 نقطة/ساعة)
+      if (timeDiff >= 300000) { // 5 minutes
+        console.log(`[shouldSaveToHistory] Driver stopped (${Math.round(currentSpeed*3.6)} km/h) - saving after ${Math.round(timeDiff/1000)}s`);
+        return true;
+      }
+      console.log(`[shouldSaveToHistory] Driver stopped - skip (${Math.round(timeDiff/1000)}s < 300s)`);
+      return false;
+    } else {
+      // إذا السائق يتحرك
+      // احفظ كل دقيقة
+      if (timeDiff >= 60000) { // 1 minute
+        console.log(`[shouldSaveToHistory] Driver moving (${Math.round(currentSpeed*3.6)} km/h) - saving after ${Math.round(timeDiff/1000)}s`);
+        return true;
+      }
+      
+      // أو إذا تحرك 50 متر
+      const lastLat = lastHistorySaveLocation.latitude;
+      const lastLng = lastHistorySaveLocation.longitude;
+      const distance = calculateDistance(lastLat, lastLng, currentLat, currentLng);
+      if (distance >= 50) { // 50 meters
+        console.log(`[shouldSaveToHistory] Driver moved ${Math.round(distance)}m - saving`);
+        return true;
+      }
+      
+      console.log(`[shouldSaveToHistory] Driver moving - skip (${Math.round(timeDiff/1000)}s < 60s, ${Math.round(distance)}m < 50m)`);
+      return false;
     }
-    
-    console.log(`[shouldSaveToHistory] Thresholds not met (${Math.round(timeDiff/1000)}s, ${Math.round(distance)}m) - skip`);
-    return false;
     
   } catch (error) {
     console.error('[shouldSaveToHistory] Error:', error);

@@ -236,7 +236,7 @@ const MainScreen = ({ navigation, route }) => {
         // عرض dialog لطلب الاستثناء
         Alert.alert(
           'تحسين الأداء',
-          'للحصول على أفضل دقة في التتبع، يرجى السماح للتطبيق بالعمل في الخلفية بدون قيود.',
+          'للحصول على أفضل أداء، يرجى السماح للتطبيق بالعمل في الخلفية بدون قيود.',
           [
             { text: 'لاحقاً', style: 'cancel' },
             { 
@@ -258,8 +258,8 @@ const MainScreen = ({ navigation, route }) => {
       try {
         // فتح إعدادات Battery Optimization مباشرة
         Alert.alert(
-          'تفعيل التتبع المستمر',
-          'للتتبع المستمر حتى عند قفل الشاشة، يجب تعطيل تحسين البطارية للتطبيق\n\nخطوات:\n1. اضغط "فتح الإعدادات"\n2. ابحث عن "البطارية" أو "Battery"\n3. اختر "تحسين البطارية" أو "Battery Optimization"\n4. ابحث عن التطبيق واختر "عدم التحسين" أو "Don\'t optimize"',
+          'تحسين الأداء',
+          'للحصول على أفضل أداء للتطبيق، يجب تعطيل تحسين البطارية\n\nخطوات:\n1. اضغط "فتح الإعدادات"\n2. ابحث عن "البطارية" أو "Battery"\n3. اختر "تحسين البطارية" أو "Battery Optimization"\n4. ابحث عن التطبيق واختر "عدم التحسين" أو "Don\'t optimize"',
           [
             {
               text: 'إلغاء',
@@ -516,8 +516,8 @@ const MainScreen = ({ navigation, route }) => {
     
     // عرض رسالة توضيحية
     Alert.alert(
-      '⚠️ تنبيه - v2.2.0',
-      'التطبيق يعمل في الخلفية. التتبع مستمر.\n\n✅ نظام التتبع المحسّن فعّال\n\nلا يمكن إغلاق التطبيق أثناء ساعات العمل.',
+      'تنبيه',
+      'التطبيق يعمل في الخلفية.\n\nلا يمكن إغلاق التطبيق أثناء ساعات العمل.',
       [{ text: 'فهمت' }]
     );
     
@@ -650,7 +650,7 @@ const MainScreen = ({ navigation, route }) => {
             {driverName ? (
               <Text style={styles.headerSubtitle}>مرحباً، {driverName}</Text>
             ) : null}
-            <Text style={styles.versionText}>v2.2.0</Text>
+            <Text style={styles.versionText}>v2.2.5</Text>
           </View>
           <TouchableOpacity
             style={styles.logoutButton}

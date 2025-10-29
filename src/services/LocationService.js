@@ -194,7 +194,6 @@ class LocationService {
 
       // Create/update driver document in drivers collection
       console.log('[LocationService] Creating/updating driver document...');
-      Alert.alert('تتبع', `محاولة الكتابة إلى Firestore للسائق: ${this.currentDriverId}`);
       try {
         await firestore()
           .collection('drivers')
@@ -205,10 +204,8 @@ class LocationService {
             lastUpdate: new Date(),
           }, { merge: true });
         console.log('[LocationService] Driver document created/updated successfully');
-        Alert.alert('نجاح', 'تم الكتابة إلى Firestore بنجاح!');
       } catch (docError) {
         console.error('[LocationService] Error creating driver document:', docError);
-        Alert.alert('خطأ Firestore', `فشل الكتابة: ${docError.message}`);
         throw new Error(`فشل إنشاء سجل السائق في قاعدة البيانات: ${docError.message}`);
       }
 
@@ -269,24 +266,38 @@ class LocationService {
     const now = Date.now();
     const currentLat = location.coords.latitude;
     const currentLng = location.coords.longitude;
+    const currentSpeed = location.coords.speed || 0; // m/s
     
     // Save if it's the first location
     if (!this.lastHistorySaveTime || !this.lastHistorySaveLocation) {
       return true;
     }
     
-    // Save if 1 minute has passed
     const timeDiff = now - this.lastHistorySaveTime;
-    if (timeDiff >= 60000) { // 60 seconds
-      return true;
-    }
     
-    // Save if moved more than 50 meters
-    const lastLat = this.lastHistorySaveLocation.latitude;
-    const lastLng = this.lastHistorySaveLocation.longitude;
-    const distance = this.calculateDistance(lastLat, lastLng, currentLat, currentLng);
-    if (distance >= 50) { // 50 meters
-      return true;
+    // Smart Stop Detection: إذا السائق متوقف (speed < 1 km/h = 0.28 m/s)
+    if (currentSpeed < 0.28) {
+      // احفظ كل 5 دقائق فقط (12 نقطة/ساعة)
+      if (timeDiff >= 300000) { // 5 minutes
+        console.log('[shouldSaveToHistory] Driver stopped - saving after 5 minutes');
+        return true;
+      }
+    } else {
+      // إذا السائق يتحرك
+      // احفظ كل دقيقة (60 نقطة/ساعة)
+      if (timeDiff >= 60000) { // 1 minute
+        console.log('[shouldSaveToHistory] Driver moving - saving after 1 minute');
+        return true;
+      }
+      
+      // أو إذا تحرك 50 متر
+      const lastLat = this.lastHistorySaveLocation.latitude;
+      const lastLng = this.lastHistorySaveLocation.longitude;
+      const distance = this.calculateDistance(lastLat, lastLng, currentLat, currentLng);
+      if (distance >= 50) { // 50 meters
+        console.log(`[shouldSaveToHistory] Driver moved ${Math.round(distance)}m - saving`);
+        return true;
+      }
     }
     
     return false;
