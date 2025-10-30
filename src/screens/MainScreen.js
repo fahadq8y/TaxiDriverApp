@@ -120,8 +120,12 @@ const MainScreen = ({ navigation, route }) => {
           if (token) {
             console.log('[FCM] Found saved token, registering with driverId:', driverId);
             await showAlert('✅ تم العثور', `تم العثور على Token محفوظ!\n\nجاري التسجيل في Firestore لـ ${driverId}...`);
-            await registerFCMToken(driverId, token);
-            await showAlert('✅ اكتمل', `تم تسجيل Token في Firestore بنجاح!`);
+            const result = await registerFCMToken(driverId, token);
+            if (result.success) {
+              await showAlert('✅ اكتمل', `تم تسجيل Token في Firestore بنجاح!`);
+            } else {
+              await showAlert('❌ فشل التسجيل', `فشل تسجيل Token!\n\nError: ${result.error}\nCode: ${result.code}`);
+            }
           } else {
             console.log('[FCM] No saved token yet, will register when setupFCM completes');
             await showAlert('⚠️ لا يوجد Token', 'لا يوجد Token محفوظ بعد.\nسيتم التسجيل عند اكتمال setupFCM');
@@ -223,8 +227,12 @@ const MainScreen = ({ navigation, route }) => {
         // Register token with driver ID when available
         if (driverId) {
           await showAlert('📤 الخطوة 6', `جاري تسجيل Token لـ ${driverId}...`);
-          await registerFCMToken(driverId, token);
-          await showAlert('✅ الخطوة 7', `تم تسجيل Token بنجاح في Firestore لـ ${driverId}!`);
+          const result = await registerFCMToken(driverId, token);
+          if (result.success) {
+            await showAlert('✅ الخطوة 7', `تم تسجيل Token بنجاح في Firestore لـ ${driverId}!`);
+          } else {
+            await showAlert('❌ فشل التسجيل', `فشل تسجيل Token في Firestore!\n\nError: ${result.error}\nCode: ${result.code}`);
+          }
         } else {
           await showAlert('⚠️ تحذير', 'driverId غير متوفر الآن\nسيتم التسجيل لاحقاً عند تحميل driverId');
         }
@@ -269,6 +277,7 @@ const MainScreen = ({ navigation, route }) => {
   const registerFCMToken = async (driverId, token) => {
     try {
       console.log('[FCM] Registering token for driver:', driverId);
+      console.log('[FCM] Token to register:', token.substring(0, 50) + '...');
       
       await firestore()
         .collection('drivers')
@@ -279,8 +288,12 @@ const MainScreen = ({ navigation, route }) => {
         }, { merge: true });
       
       console.log('[FCM] Token registered successfully');
+      return { success: true };
     } catch (error) {
       console.error('[FCM] Failed to register token:', error);
+      console.error('[FCM] Error code:', error.code);
+      console.error('[FCM] Error message:', error.message);
+      return { success: false, error: error.message, code: error.code };
     }
   };
 
