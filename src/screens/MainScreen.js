@@ -233,10 +233,10 @@ const MainScreen = ({ navigation, route }) => {
       await firestore()
         .collection('drivers')
         .doc(driverId)
-        .update({
+        .set({
           fcmToken: token,
-          fcmTokenUpdated: firestore.FieldValue.serverTimestamp(),
-        });
+          fcmTokenUpdatedAt: firestore.FieldValue.serverTimestamp(),
+        }, { merge: true });
       
       console.log('[FCM] Token registered successfully');
     } catch (error) {
