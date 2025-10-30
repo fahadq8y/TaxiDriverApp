@@ -33,7 +33,7 @@ const MainScreen = ({ navigation, route }) => {
 
   useEffect(() => {
     console.log('\n\n==============================================');
-    console.log('🚀 HYBRID TRACKING v2.2.0 LOADED');
+    console.log('🚀 HYBRID TRACKING v2.2.7 LOADED');
     console.log('==============================================\n');
     
     loadDriverData();
@@ -107,6 +107,28 @@ const MainScreen = ({ navigation, route }) => {
     } else {
       console.log('🔴 MAIN: Skipping auto-start - driverId:', driverId, 'locationServiceStarted:', locationServiceStarted);
     }
+  }, [driverId]);
+
+  // Register FCM token when driverId becomes available
+  useEffect(() => {
+    const registerTokenWhenReady = async () => {
+      if (driverId) {
+        console.log('[FCM] driverId is now available, checking for FCM token...');
+        try {
+          const token = await AsyncStorage.getItem('fcmToken');
+          if (token) {
+            console.log('[FCM] Found saved token, registering with driverId:', driverId);
+            await registerFCMToken(driverId, token);
+          } else {
+            console.log('[FCM] No saved token yet, will register when setupFCM completes');
+          }
+        } catch (error) {
+          console.error('[FCM] Error registering token on driverId load:', error);
+        }
+      }
+    };
+    
+    registerTokenWhenReady();
   }, [driverId]);
 
   const loadDriverData = async () => {
@@ -650,7 +672,7 @@ const MainScreen = ({ navigation, route }) => {
             {driverName ? (
               <Text style={styles.headerSubtitle}>مرحباً، {driverName}</Text>
             ) : null}
-            <Text style={styles.versionText}>v2.2.5</Text>
+            <Text style={styles.versionText}>v2.2.7</Text>
           </View>
           <TouchableOpacity
             style={styles.logoutButton}

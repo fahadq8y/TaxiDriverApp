@@ -35,7 +35,8 @@ const shouldSaveToHistory = async (location) => {
   const now = Date.now();
   const currentLat = location.coords.latitude;
   const currentLng = location.coords.longitude;
-  const currentSpeed = location.coords.speed || 0; // m/s
+  // Handle null/undefined speed values safely
+  const currentSpeed = location.coords.speed ?? 0; // m/s - use nullish coalescing
   
   try {
     // Read last save time and location from AsyncStorage
@@ -123,6 +124,12 @@ const HeadlessTask = async (event) => {
             speed: location.coords.speed || 0,
             heading: location.coords.heading || 0,
           },
+          // Also save location directly in driver document (for easy access)
+          latitude: location.coords.latitude,
+          longitude: location.coords.longitude,
+          speed: location.coords.speed || 0,
+          accuracy: location.coords.accuracy,
+          heading: location.coords.heading || -1,
           lastUpdate: new Date(),
           isActive: true,
         }, { merge: true });
