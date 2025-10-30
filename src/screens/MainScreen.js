@@ -114,21 +114,21 @@ const MainScreen = ({ navigation, route }) => {
     const registerTokenWhenReady = async () => {
       if (driverId) {
         console.log('[FCM] driverId is now available, checking for FCM token...');
-        Alert.alert('🔄 FCM useEffect', `driverId متوفر الآن: ${driverId}\nجاري البحث عن Token...`);
+        await showAlert('🔄 useEffect', `driverId متوفر الآن: ${driverId}\nجاري البحث عن Token محفوظ...`);
         try {
           const token = await AsyncStorage.getItem('fcmToken');
           if (token) {
             console.log('[FCM] Found saved token, registering with driverId:', driverId);
-            Alert.alert('✅ Token Found', `تم العثور على Token محفوظ!\n\nجاري التسجيل لـ ${driverId}...`);
+            await showAlert('✅ تم العثور', `تم العثور على Token محفوظ!\n\nجاري التسجيل في Firestore لـ ${driverId}...`);
             await registerFCMToken(driverId, token);
-            Alert.alert('✅ Registration Complete', `تم تسجيل Token في Firestore لـ ${driverId}!`);
+            await showAlert('✅ اكتمل', `تم تسجيل Token في Firestore بنجاح!`);
           } else {
             console.log('[FCM] No saved token yet, will register when setupFCM completes');
-            Alert.alert('⚠️ No Token', 'لا يوجد Token محفوظ بعد.\nسيتم التسجيل عند اكتمال setupFCM');
+            await showAlert('⚠️ لا يوجد Token', 'لا يوجد Token محفوظ بعد.\nسيتم التسجيل عند اكتمال setupFCM');
           }
         } catch (error) {
           console.error('[FCM] Error registering token on driverId load:', error);
-          Alert.alert('❌ Error', `خطأ في تسجيل Token:\n${error.message}`);
+          await showAlert('❌ خطأ', `خطأ في تسجيل Token:\n${error.message}`);
         }
       }
     };
@@ -172,11 +172,23 @@ const MainScreen = ({ navigation, route }) => {
     }
   };
 
+  // Helper function to show alerts sequentially
+  const showAlert = (title, message) => {
+    return new Promise((resolve) => {
+      Alert.alert(
+        title,
+        message,
+        [{ text: 'موافق', onPress: () => resolve() }],
+        { cancelable: false }
+      );
+    });
+  };
+
   // Setup FCM for push notifications and wake-up
   const setupFCM = async () => {
     try {
       console.log('[FCM] Setting up FCM...');
-      Alert.alert('🔔 FCM Debug', 'بدء إعداد FCM...');
+      await showAlert('🔔 الخطوة 1', 'بدء إعداد FCM...');
       
       // Request permission (iOS only, Android auto-granted)
       const authStatus = await messaging().requestPermission();
@@ -184,37 +196,39 @@ const MainScreen = ({ navigation, route }) => {
         authStatus === messaging.AuthorizationStatus.AUTHORIZED ||
         authStatus === messaging.AuthorizationStatus.PROVISIONAL;
       
-      Alert.alert('🔔 FCM Debug', `Permission status: ${authStatus}\nEnabled: ${enabled}`);
+      await showAlert('🔔 الخطوة 2', `حالة الصلاحية:\nStatus: ${authStatus}\nEnabled: ${enabled}`);
       
       if (enabled) {
         console.log('[FCM] Permission granted');
         
         // Get FCM token
-        Alert.alert('🔔 FCM Debug', 'جاري الحصول على FCM token...');
+        await showAlert('🔔 الخطوة 3', 'جاري الحصول على FCM token...');
         const token = await messaging().getToken();
         console.log('[FCM] Token:', token);
         
         if (token) {
-          Alert.alert('✅ FCM Token', `تم الحصول على Token!\n\nToken: ${token.substring(0, 50)}...\n\nLength: ${token.length}`);
+          await showAlert('✅ الخطوة 4', `تم الحصول على Token!\n\nToken: ${token.substring(0, 50)}...\n\nLength: ${token.length}`);
         } else {
-          Alert.alert('❌ FCM Error', 'Token is null or undefined!');
+          await showAlert('❌ خطأ', 'Token is null or undefined!');
+          return;
         }
         
         // Save token to AsyncStorage
         await AsyncStorage.setItem('fcmToken', token);
-        Alert.alert('💾 FCM Debug', 'تم حفظ Token في AsyncStorage');
+        await showAlert('💾 الخطوة 5', 'تم حفظ Token في AsyncStorage');
         
         // Register token with driver ID when available
         if (driverId) {
-          Alert.alert('📤 FCM Debug', `جاري تسجيل Token لـ ${driverId}...`);
+          await showAlert('📤 الخطوة 6', `جاري تسجيل Token لـ ${driverId}...`);
           await registerFCMToken(driverId, token);
-          Alert.alert('✅ FCM Success', `تم تسجيل Token بنجاح لـ ${driverId}!`);
+          await showAlert('✅ الخطوة 7', `تم تسجيل Token بنجاح في Firestore لـ ${driverId}!`);
         } else {
-          Alert.alert('⚠️ FCM Warning', 'driverId غير متوفر، سيتم التسجيل لاحقاً');
+          await showAlert('⚠️ تحذير', 'driverId غير متوفر الآن\nسيتم التسجيل لاحقاً عند تحميل driverId');
         }
       } else {
         console.log('[FCM] Permission denied');
-        Alert.alert('❌ FCM Error', 'تم رفض صلاحية الإشعارات!');
+        await showAlert('❌ خطأ', 'تم رفض صلاحية الإشعارات!');
+        return;
       }
       
       // Listen for token refresh
@@ -241,10 +255,10 @@ const MainScreen = ({ navigation, route }) => {
       });
       
       console.log('[FCM] Setup complete');
-      Alert.alert('✅ FCM Complete', 'اكتمل إعداد FCM بنجاح!');
+      await showAlert('✅ اكتمل', 'اكتمل إعداد FCM بنجاح!');
     } catch (error) {
       console.error('[FCM] Setup error:', error);
-      Alert.alert('❌ FCM Error', `خطأ في إعداد FCM:\n\n${error.message}\n\nCode: ${error.code}`);
+      await showAlert('❌ خطأ فادح', `خطأ في إعداد FCM:\n\n${error.message}\n\nCode: ${error.code}`);
     }
   };
   
