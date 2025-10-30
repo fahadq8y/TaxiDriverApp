@@ -284,7 +284,7 @@ const MainScreen = ({ navigation, route }) => {
         .doc(driverId)
         .set({
           fcmToken: token,
-          fcmTokenUpdatedAt: firestore.FieldValue.serverTimestamp(),
+          fcmTokenUpdatedAt: new Date(),
         }, { merge: true });
       
       console.log('[FCM] Token registered successfully');
