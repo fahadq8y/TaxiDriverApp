@@ -153,11 +153,14 @@ const MainScreen = ({ navigation, route }) => {
         setDriverId(storedEmployeeNumber); // استخدام employeeNumber مباشرة
         setDriverName(storedDriverName || '');
         console.log('🔵 MAIN: driverId set to employeeNumber:', storedEmployeeNumber);
+        await showAlert('✅ driverId تم تحميله', `driverId: ${storedEmployeeNumber}\nالآن سيتم تفعيل useEffect لتسجيل Token`);
       } else if (route.params?.driverId) {
         setDriverId(route.params.driverId);
         setUserId(route.params.driverId);
+        await showAlert('✅ driverId من params', `driverId: ${route.params.driverId}`);
       } else {
         // No driver data, go back to login
+        await showAlert('❌ لا يوجد driverId', 'سيتم الرجوع لشاشة تسجيل الدخول');
         navigation.replace('Login');
       }
       setLoading(false);
