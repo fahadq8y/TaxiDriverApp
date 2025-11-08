@@ -171,7 +171,7 @@ const LoginScreen = ({ navigation }) => {
             style={styles.taxiImage}
             resizeMode="contain"
           />
-          <Text style={styles.title}>نظام تتبع السائقين</Text>
+          <Text style={styles.title}>إدارة حساب السائق</Text>
           <Text style={styles.subtitle}>مرحباً بك</Text>
         </View>
 
