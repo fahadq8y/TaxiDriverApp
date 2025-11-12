@@ -76,7 +76,7 @@ class LocationService {
       const state = await BackgroundGeolocation.ready({
         // Geolocation Config
         desiredAccuracy: BackgroundGeolocation.DESIRED_ACCURACY_HIGH,
-        distanceFilter: 0,
+        distanceFilter: 10,
         
         // Application config
         debug: false, // Disable debug sounds - set to false to stop all sound effects
@@ -117,14 +117,14 @@ class LocationService {
         // ===== OFFLINE STORAGE & SYNC =====
         // Transistor SQLite database for offline storage
         autoSync: true,              // Auto-sync to server when online
-        autoSyncThreshold: 1,        // Sync after 5 locations
-        batchSync: false,             // Batch multiple locations
+        autoSyncThreshold: 5,        // Sync after 5 locations
+        batchSync: true,             // Batch multiple locations
         maxBatchSize: 50,            // Max 50 locations per batch
         maxDaysToPersist: 7,         // Keep locations for 7 days
         maxRecordsToPersist: 10000,  // Max 10k records in SQLite
         
         // ===== ACTIVITY RECOGNITION (Battery Saving) =====
-        stopTimeout: 15,              // Stop tracking after 5 minutes of no movement
+        stopTimeout: 5,              // Stop tracking after 5 minutes of no movement
         stopDetectionDelay: 1,       // Wait 1 minute before detecting stop
         disableStopDetection: false, // Enable stop detection
         

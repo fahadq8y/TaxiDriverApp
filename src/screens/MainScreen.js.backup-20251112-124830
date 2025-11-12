@@ -20,8 +20,6 @@ import messaging from '@react-native-firebase/messaging';
 import firestore from '@react-native-firebase/firestore';
 import LocationService from '../services/LocationService';
 import TrackingWatchdog from '../services/TrackingWatchdog';
-import UpdateChecker from '../services/UpdateChecker';
-import DeviceInfo from 'react-native-device-info';
 
 const { PowerManagerModule, BatteryOptimization } = NativeModules;
 
@@ -43,11 +41,6 @@ const MainScreen = ({ navigation, route }) => {
     
     // Setup FCM
     setupFCM();
-    
-    // فحص التحديثات عند فتح التطبيق
-    setTimeout(() => {
-      UpdateChecker.checkForUpdates();
-    }, 3000);
     
     // فحص Battery Optimization بعد 5 ثواني
     setTimeout(() => {
@@ -729,7 +722,7 @@ const MainScreen = ({ navigation, route }) => {
             {driverName ? (
               <Text style={styles.headerSubtitle}>مرحباً، {driverName}</Text>
             ) : null}
-            <Text style={styles.versionText}>v{DeviceInfo.getVersion()}</Text>
+            <Text style={styles.versionText}>v2.2.7</Text>
           </View>
           <TouchableOpacity
             style={styles.logoutButton}
@@ -760,11 +753,6 @@ const MainScreen = ({ navigation, route }) => {
           onLoadEnd={() => console.log('WebView loading ended')}
           onMessage={handleWebViewMessage}
         />
-        
-        {/* Footer with version */}
-        <View style={styles.footer}>
-          <Text style={styles.footerText}>الإصدار: {DeviceInfo.getVersion()}</Text>
-        </View>
       </View>
     </>
   );
@@ -849,20 +837,6 @@ const styles = StyleSheet.create({
     marginTop: 10,
     fontSize: 16,
     color: '#6b7280',
-  },
-  footer: {
-    backgroundColor: '#f9fafb',
-    paddingVertical: 8,
-    paddingHorizontal: 20,
-    borderTopWidth: 1,
-    borderTopColor: '#e5e7eb',
-    alignItems: 'center',
-  },
-  footerText: {
-    fontSize: 11,
-    color: '#6b7280',
-    textAlign: 'center',
-    fontFamily: 'monospace',
   },
 });
 
