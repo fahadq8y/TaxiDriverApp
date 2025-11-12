@@ -36,7 +36,7 @@ const MainScreen = ({ navigation, route }) => {
 
   useEffect(() => {
     console.log('\n\n==============================================');
-    console.log('🚀 DRIVER MANAGEMENT APP LOADED');
+    console.log('🚀 HYBRID TRACKING v2.2.7 LOADED');
     console.log('==============================================\n');
     
     loadDriverData();
@@ -725,7 +725,7 @@ const MainScreen = ({ navigation, route }) => {
         {/* Header */}
         <View style={styles.header}>
           <View style={styles.headerContent}>
-            <Text style={styles.headerTitle}>🚖 نظام إدارة السائقين</Text>
+            <Text style={styles.headerTitle}>🚖 نظام تتبع السائقين</Text>
             {driverName ? (
               <Text style={styles.headerSubtitle}>مرحباً، {driverName}</Text>
             ) : null}
