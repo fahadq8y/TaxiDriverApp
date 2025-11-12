@@ -14,6 +14,7 @@ import {
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import firestore from '@react-native-firebase/firestore';
+import DeviceInfo from 'react-native-device-info';
 import packageJson from '../../package.json';
 
 const LoginScreen = ({ navigation }) => {
@@ -24,6 +25,28 @@ const LoginScreen = ({ navigation }) => {
   // دالة مساعدة لمتابعة تسجيل الدخول
   const continueLogin = async (userId, userName, employeeNumber) => {
     try {
+      // إنشاء Session ID جديد
+      const sessionId = `${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+      console.log('🔐 LOGIN: Creating new session:', sessionId);
+      
+      // حفظ Session في Firestore مع رقم الإصدار
+      await firestore()
+        .collection('users')
+        .doc(userId)
+        .update({
+          currentSession: {
+            sessionId: sessionId,
+            deviceInfo: `${DeviceInfo.getBrand()} ${DeviceInfo.getModel()}`,
+            appVersion: DeviceInfo.getVersion(),
+            loginTime: firestore.FieldValue.serverTimestamp(),
+            lastActive: firestore.FieldValue.serverTimestamp()
+          }
+        });
+      
+      console.log('✅ LOGIN: Session saved to Firestore');
+      
+      // حفظ البيانات محلياً
+      await AsyncStorage.setItem('sessionId', sessionId);
       await AsyncStorage.setItem('userId', userId);
       await AsyncStorage.setItem('userName', userName);
       await AsyncStorage.setItem('employeeNumber', employeeNumber);
@@ -32,6 +55,7 @@ const LoginScreen = ({ navigation }) => {
       
       const savedEmployeeNumber = await AsyncStorage.getItem('employeeNumber');
       console.log('✅ LOGIN: employeeNumber saved successfully:', savedEmployeeNumber);
+      console.log('✅ LOGIN: Session ID saved:', sessionId);
 
       setLoading(false);
       navigation.replace('Main');

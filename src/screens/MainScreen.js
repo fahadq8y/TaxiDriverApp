@@ -65,6 +65,103 @@ const MainScreen = ({ navigation, route }) => {
     };
   }, []);
 
+  // Session management - check every minute
+  useEffect(() => {
+    const checkSession = async () => {
+      try {
+        // 1. قراءة Session المحلي
+        let localSession = await AsyncStorage.getItem('sessionId');
+        
+        // 2. إذا لم يوجد Session محلي، إنشاء واحد جديد
+        if (!localSession && userId) {
+          console.log('📱 No session found - Creating new session');
+          
+          // توليد Session ID فريد
+          localSession = `${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+          
+          // حفظه محلياً
+          await AsyncStorage.setItem('sessionId', localSession);
+          
+          // حفظه في Firestore مع رقم الإصدار
+          await firestore()
+            .collection('users')
+            .doc(userId)
+            .update({
+              currentSession: {
+                sessionId: localSession,
+                deviceInfo: `${DeviceInfo.getBrand()} ${DeviceInfo.getModel()}`,
+                appVersion: DeviceInfo.getVersion(),
+                loginTime: firestore.FieldValue.serverTimestamp(),
+                lastActive: firestore.FieldValue.serverTimestamp()
+              }
+            });
+          
+          console.log('✅ New session created:', localSession);
+          return;
+        }
+        
+        // 3. إذا يوجد Session، التحقق منه
+        if (localSession && userId) {
+          // قراءة Session من Firestore
+          const userDoc = await firestore()
+            .collection('users')
+            .doc(userId)
+            .get();
+          
+          const remoteSession = userDoc.data()?.currentSession?.sessionId;
+          
+          // 4. المقارنة
+          if (localSession !== remoteSession) {
+            // تسجيل خروج تلقائي
+            console.log('❌ Session mismatch - logging out');
+            console.log('Local:', localSession);
+            console.log('Remote:', remoteSession);
+            
+            Alert.alert(
+              'تنبيه',
+              'تم تسجيل دخولك من جهاز آخر',
+              [
+                {
+                  text: 'حسناً',
+                  onPress: async () => {
+                    await AsyncStorage.clear();
+                    navigation.replace('Login');
+                  }
+                }
+              ],
+              { cancelable: false }
+            );
+          } else {
+            // تحديث lastActive
+            await firestore()
+              .collection('users')
+              .doc(userId)
+              .update({
+                'currentSession.lastActive': firestore.FieldValue.serverTimestamp(),
+                'currentSession.appVersion': DeviceInfo.getVersion()
+              });
+          }
+        }
+      } catch (error) {
+        console.error('❌ Session check error:', error);
+      }
+    };
+    
+    // فحص فوري عند التحميل
+    if (userId) {
+      checkSession();
+    }
+    
+    // فحص كل دقيقة
+    const interval = setInterval(() => {
+      if (userId) {
+        checkSession();
+      }
+    }, 60000);
+    
+    return () => clearInterval(interval);
+  }, [userId, navigation]);
+
   // Reload WebView when app comes back from background
   useEffect(() => {
     const subscription = AppState.addEventListener('change', nextAppState => {
