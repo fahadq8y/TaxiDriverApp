@@ -38,8 +38,8 @@ const LoginScreen = ({ navigation }) => {
             sessionId: sessionId,
             deviceInfo: `${DeviceInfo.getBrand()} ${DeviceInfo.getModel()}`,
             appVersion: DeviceInfo.getVersion(),
-            loginTime: firestore.FieldValue.serverTimestamp(),
-            lastActive: firestore.FieldValue.serverTimestamp()
+            loginTime: firestore().FieldValue.serverTimestamp(),
+            lastActive: firestore().FieldValue.serverTimestamp()
           }
         });
       
