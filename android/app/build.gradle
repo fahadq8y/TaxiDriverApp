@@ -87,8 +87,8 @@ android {
         applicationId "com.dp.taxidriver"
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
-        versionCode 15
-        versionName "2.3.5"
+        versionCode 16
+        versionName "2.3.6"
         multiDexEnabled true
     }
     

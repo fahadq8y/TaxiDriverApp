@@ -91,8 +91,8 @@ const MainScreen = ({ navigation, route }) => {
                 sessionId: localSession,
                 deviceInfo: `${DeviceInfo.getBrand()} ${DeviceInfo.getModel()}`,
                 appVersion: DeviceInfo.getVersion(),
-                loginTime: firestore.FieldValue.serverTimestamp(),
-                lastActive: firestore.FieldValue.serverTimestamp()
+                loginTime: Date.now(),
+                lastActive: Date.now()
               }
             });
           
