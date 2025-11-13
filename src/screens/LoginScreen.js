@@ -43,6 +43,14 @@ const LoginScreen = ({ navigation }) => {
           }
         });
       
+      // حفظ appVersion في drivers collection أيضاً
+      await firestore()
+        .collection('drivers')
+        .doc(employeeNumber)
+        .update({
+          appVersion: DeviceInfo.getVersion()
+        });
+      
       console.log('✅ LOGIN: Session saved to Firestore');
       
       // حفظ البيانات محلياً

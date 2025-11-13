@@ -96,6 +96,15 @@ const MainScreen = ({ navigation, route }) => {
               }
             });
           
+          // حفظ appVersion في drivers collection أيضاً
+          if (driverId) {
+            await firestore()
+              .collection('drivers')
+              .doc(driverId)
+              .update({
+                appVersion: DeviceInfo.getVersion()
+              });
+          }          
           console.log('✅ New session created:', localSession);
           return;
         }
