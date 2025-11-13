@@ -95,7 +95,7 @@ class LocationService {
         notification: {
           title: '',  // فارغ تماماً
           text: '',   // فارغ تماماً
-          channelName: 'Background Service',  // اسم عام
+          channelName: '',  // فارغ تماماً لإخفاء الإشعار
           channelId: 'bg_service',
           priority: BackgroundGeolocation.NOTIFICATION_PRIORITY_MIN,
           smallIcon: 'mipmap/ic_launcher',
