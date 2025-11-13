@@ -110,20 +110,10 @@ async function sendWakeUpPush(driverId, fcmToken, driverName) {
         driverId: driverId,
         timestamp: Date.now().toString(),
       },
-      // إضافة notification لضمان الوصول بعد Force Stop
-      notification: {
-        title: 'تحديث النظام',
-        body: 'جاري تحديث البيانات...',
-      },
+      // إزالة notification لإخفاء الإشعار تماماً
+      // استخدام data-only message (silent push)
       android: {
         priority: 'high',
-        notification: {
-          channelId: 'system_updates',
-          priority: 'high',
-          visibility: 'secret', // لا تظهر على الشاشة
-          sound: 'default',
-          tag: 'wake_up', // يستبدل الإشعارات السابقة
-        },
       },
     };
     
