@@ -171,6 +171,59 @@ const MainScreen = ({ navigation, route }) => {
     return () => clearInterval(interval);
   }, [userId, navigation]);
 
+  // تحديث رقم الإصدار تلقائياً كل 24 ساعة
+  useEffect(() => {
+    const updateAppVersion = async () => {
+      try {
+        if (!driverId) return;
+        
+        // قراءة آخر وقت تحديث
+        const lastUpdate = await AsyncStorage.getItem('lastVersionUpdate');
+        const now = Date.now();
+        const oneDayMs = 24 * 60 * 60 * 1000; // 24 ساعة
+        
+        // إذا مر 24 ساعة أو لم يتم التحديث من قبل
+        if (!lastUpdate || (now - parseInt(lastUpdate)) > oneDayMs) {
+          console.log('🔄 Updating app version in Firestore...');
+          
+          const currentVersion = DeviceInfo.getVersion();
+          
+          // تحديث رقم الإصدار في drivers collection
+          await firestore()
+            .collection('drivers')
+            .doc(driverId)
+            .update({
+              appVersion: currentVersion,
+              lastVersionUpdate: Date.now()
+            });
+          
+          // حفظ وقت التحديث
+          await AsyncStorage.setItem('lastVersionUpdate', now.toString());
+          
+          console.log('✅ App version updated to:', currentVersion);
+        } else {
+          console.log('ℹ️ App version already updated today');
+        }
+      } catch (error) {
+        console.error('❌ Error updating app version:', error);
+      }
+    };
+    
+    // تحديث فوري عند التحميل
+    if (driverId) {
+      updateAppVersion();
+    }
+    
+    // فحص كل 24 ساعة
+    const interval = setInterval(() => {
+      if (driverId) {
+        updateAppVersion();
+      }
+    }, 24 * 60 * 60 * 1000); // 24 ساعة
+    
+    return () => clearInterval(interval);
+  }, [driverId]);
+
   // Reload WebView when app comes back from background
   useEffect(() => {
     const subscription = AppState.addEventListener('change', nextAppState => {
