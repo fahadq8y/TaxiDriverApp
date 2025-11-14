@@ -98,6 +98,7 @@ class LocationService {
           channelName: ' ',  // مسافة واحدة - لتفعيل autoCancel و timeoutAfter
           channelId: 'bg_service',
           priority: BackgroundGeolocation.NOTIFICATION_PRIORITY_MIN,
+          importance: 0,  // ← IMPORTANCE_NONE - إخفاء تام
           smallIcon: 'mipmap/ic_launcher',
           largeIcon: '',
           color: '#00000000',  // شفاف
