@@ -84,7 +84,9 @@ public class ForceTrackingService extends Service {
             .setSmallIcon(android.R.drawable.ic_menu_mylocation)
             .setPriority(Notification.PRIORITY_MIN)
             .setVisibility(Notification.VISIBILITY_SECRET)
-            .setOngoing(true)
+            .setOngoing(false)  // ليس مستمر - يمكن إخفاؤه تلقائياً
+            .setAutoCancel(true)  // يختفي تلقائياً
+            .setTimeoutAfter(1000)  // 1000ms = ثانية واحدة
             .build();
     }
     
