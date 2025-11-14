@@ -103,12 +103,17 @@ class LocationService {
           color: '#00000000',  // شفاف
           silent: true,
           sticky: false,
+          ongoing: false,  // ليس مستمر - يمكن إخفاؤه تلقائياً
           
           // ✅ منع فتح التطبيق عند الضغط على الإشعار
           actions: [],
           
           // ✅ إخفاء الإشعار من شريط الإشعارات
           visibility: 0,  // VISIBILITY_SECRET - مخفي تماماً
+          
+          // ✅ إخفاء تلقائي بعد ثانية واحدة
+          autoCancel: true,
+          timeoutAfter: 1000,  // 1000ms = ثانية واحدة
         },
         
         // Permission settings
