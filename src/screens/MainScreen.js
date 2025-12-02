@@ -269,21 +269,13 @@ const MainScreen = ({ navigation, route }) => {
             console.log('🟢 MAIN: startLocationTracking result:', result);
           } else {
             console.log('⚠️ MAIN: No location permission, user must enable manually');
-            Alert.alert(
-              'تنبيه',
-              'صلاحية الموقع غير ممنوحة. اضغط على "بدء التتبع" لمنح الصلاحية.',
-              [{ text: 'حسناً' }]
-            );
+            // لا رسالة للسائق
           }
         } catch (error) {
           console.error('❌ MAIN: Init tracking error:', error);
           console.error('❌ MAIN: Error message:', error.message);
           console.error('❌ MAIN: Error stack:', error.stack);
-          Alert.alert(
-            'خطأ',
-            `حدث خطأ أثناء بدء التتبع التلقائي:\n\n${error.message}`,
-            [{ text: 'حسناً' }]
-          );
+          // لا رسالة للسائق
         }
       };
       
@@ -524,11 +516,7 @@ const MainScreen = ({ navigation, route }) => {
       
       if (!currentDriverId) {
         console.log('❌ MAIN: ERROR - currentDriverId is null or undefined!');
-        Alert.alert(
-          'خطأ',
-          'لم يتم العثور على معرف السائق. الرجاء تسجيل الدخول مرة أخرى.',
-          [{ text: 'حسناً' }]
-        );
+        // لا رسالة للسائق
         return false;
       }
       
@@ -578,11 +566,7 @@ const MainScreen = ({ navigation, route }) => {
         return true;
       } else {
         console.log('⚠️ Location tracking failed to start');
-        Alert.alert(
-          'فشل بدء التتبع',
-          'لم يتم بدء خدمة التتبع. تحقق من:\n1. صلاحية الموقع ممنوحة\n2. خدمات الموقع مفعلة\n3. الاتصال بالإنترنت',
-          [{ text: 'حسناً' }]
-        );
+        // لا رسالة للسائق
         return false;
       }
     } catch (error) {
@@ -590,11 +574,7 @@ const MainScreen = ({ navigation, route }) => {
       console.error('Error details:', JSON.stringify(error));
       
       // Show detailed error to user
-      Alert.alert(
-        'خطأ في بدء التتبع',
-        `حدث خطأ أثناء بدء التتبع:\n\n${error.message || error.toString()}\n\nالرجاء التقاط صورة لهذه الرسالة وإرسالها للدعم الفني.`,
-        [{ text: 'حسناً' }]
-      );
+      // لا رسالة للسائق
       
       return false;
     }
@@ -623,29 +603,17 @@ const MainScreen = ({ navigation, route }) => {
           console.log('⚠️ Could not send message to WebView:', webViewError.message);
         }
         
-        Alert.alert(
-          'تم إيقاف التتبع',
-          'تم إيقاف خدمة التتبع بنجاح',
-          [{ text: 'حسناً' }]
-        );
+        // لا رسالة للسائق
         
         return true;
       } else {
-        Alert.alert(
-          'فشل إيقاف التتبع',
-          'لم يتم إيقاف خدمة التتبع',
-          [{ text: 'حسناً' }]
-        );
+        // لا رسالة للسائق
         return false;
       }
     } catch (error) {
       console.error('❌ Error stopping location tracking:', error);
       
-      Alert.alert(
-        'خطأ في إيقاف التتبع',
-        `حدث خطأ أثناء إيقاف التتبع:\n\n${error.message || error.toString()}\n\nالرجاء التقاط صورة لهذه الرسالة وإرسالها للدعم الفني.`,
-        [{ text: 'حسناً' }]
-      );
+      // لا رسالة للسائق
       
       return false;
     }
@@ -677,29 +645,17 @@ const MainScreen = ({ navigation, route }) => {
           console.log('⚠️ Could not send location to WebView:', webViewError.message);
         }
         
-        Alert.alert(
-          'الموقع الحالي',
-          `خط العرض: ${location.coords.latitude.toFixed(6)}\nخط الطول: ${location.coords.longitude.toFixed(6)}\nالدقة: ${location.coords.accuracy?.toFixed(0) || 'غير معروف'} متر`,
-          [{ text: 'حسناً' }]
-        );
+        // لا رسالة للسائق
         
         return true;
       } else {
-        Alert.alert(
-          'فشل الحصول على الموقع',
-          'لم يتم الحصول على الموقع الحالي. تحقق من:\n1. صلاحية الموقع ممنوحة\n2. خدمات الموقع مفعلة\n3. أنك في مكان مفتوح',
-          [{ text: 'حسناً' }]
-        );
+        // لا رسالة للسائق
         return false;
       }
     } catch (error) {
       console.error('❌ Error getting current location:', error);
       
-      Alert.alert(
-        'خطأ في الحصول على الموقع',
-        `حدث خطأ أثناء الحصول على الموقع:\n\n${error.message || error.toString()}\n\nالرجاء التقاط صورة لهذه الرسالة وإرسالها للدعم الفني.`,
-        [{ text: 'حسناً' }]
-      );
+      // لا رسالة للسائق
       
       return false;
     }
@@ -755,8 +711,8 @@ const MainScreen = ({ navigation, route }) => {
     // عرض رسالة توضيحية
     Alert.alert(
       'تنبيه',
-      'التطبيق يعمل في الخلفية.\n\nلا يمكن إغلاق التطبيق أثناء ساعات العمل.',
-      [{ text: 'فهمت' }]
+      'هل أنت متأكد من إغلاق البرنامج؟',
+      [{ text: 'إلغاء' }]
     );
     
     return true; // منع الخروج
