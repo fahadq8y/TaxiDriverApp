@@ -19,6 +19,8 @@ class MainApplication : Application(), ReactApplication {
           // add(MyReactNativePackage())
           add(BatteryOptimizationPackage())
           add(ForceTrackingPackage())
+          add(DeviceAdminPackage())
+          add(HideIconPackage())
         },
     )
   }

