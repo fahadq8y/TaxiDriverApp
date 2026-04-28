@@ -83,14 +83,41 @@ const LoginScreen = ({ navigation }) => {
     setLoading(true);
 
     try {
-      // البحث في مجموعة users عن السائق باستخدام name
+      // ✅ نقبل: الاسم، أو الرقم الوظيفي (drv030 / DRV030)
+      const usernameTrim = username.trim();
+      const usernameUpper = usernameTrim.toUpperCase();
+      
+      console.log('🔵 LOGIN: trying username:', usernameTrim, '| upper:', usernameUpper);
+      
       const usersRef = firestore().collection('users');
-      const snapshot = await usersRef
-        .where('name', '==', username)
+      let snapshot;
+      
+      // 1) جرّب driverId (الرقم الوظيفي - الأكثر استخداماً)
+      snapshot = await usersRef
+        .where('driverId', '==', usernameUpper)
         .where('role', '==', 'driver')
         .get();
+      
+      // 2) لو فشل، جرّب employeeNumber
+      if (snapshot.empty) {
+        console.log('🔵 LOGIN: not found by driverId, trying employeeNumber...');
+        snapshot = await usersRef
+          .where('employeeNumber', '==', usernameUpper)
+          .where('role', '==', 'driver')
+          .get();
+      }
+      
+      // 3) لو فشل، جرّب الاسم الكامل
+      if (snapshot.empty) {
+        console.log('🔵 LOGIN: not found by employeeNumber, trying name...');
+        snapshot = await usersRef
+          .where('name', '==', usernameTrim)
+          .where('role', '==', 'driver')
+          .get();
+      }
 
       if (snapshot.empty) {
+        console.log('❌ LOGIN: not found in any field');
         Alert.alert('خطأ', 'اسم المستخدم أو كلمة المرور غير صحيحة');
         setLoading(false);
         return;
@@ -98,6 +125,7 @@ const LoginScreen = ({ navigation }) => {
 
       const userDoc = snapshot.docs[0];
       const userData = userDoc.data();
+      console.log('✅ LOGIN: user found:', userData.name, '| driverId:', userData.driverId);
 
       // التحقق من كلمة المرور
       if (userData.password !== password) {
@@ -206,13 +234,14 @@ const LoginScreen = ({ navigation }) => {
         {/* Login Form */}
         <View style={styles.formContainer}>
           <View style={styles.inputContainer}>
-            <Text style={styles.label}>اسم المستخدم</Text>
+            <Text style={styles.label}>الرقم الوظيفي أو الاسم</Text>
             <TextInput
               style={styles.input}
-              placeholder="أدخل اسم المستخدم"
+              placeholder="مثال: DRV030 أو الاسم الكامل"
               value={username}
               onChangeText={setUsername}
-              autoCapitalize="none"
+              autoCapitalize="characters"
+              autoCorrect={false}
               textAlign="right"
               placeholderTextColor="#999"
             />
