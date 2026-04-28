@@ -76,7 +76,15 @@ class LocationService {
       const state = await BackgroundGeolocation.ready({
         // Geolocation Config
         desiredAccuracy: BackgroundGeolocation.DESIRED_ACCURACY_HIGH,
-        distanceFilter: 0,
+        // C3: distanceFilter:30 يقلل عدد الـ location events بنسبة ~95%
+        // (من ~1/ثانية إلى مرة كل 30 متر تقريباً)
+        // الـ heartbeat (أدناه) يضمن استمرار تحديث lastUpdate حتى لو السائق متوقف
+        distanceFilter: 30,
+        
+        // C3: heartbeat كل 60 ثانية — يحدث lastUpdate في drivers/<id>
+        // عشان monitorDrivers Cloud Function ما تظن السائق توقف عن التتبع
+        // (بدون كتابة جديدة في locationHistory — فقط ping خفيف)
+        heartbeatInterval: 60,
         
         // Application config
         debug: false, // Disable debug sounds - set to false to stop all sound effects
@@ -127,10 +135,12 @@ class LocationService {
         },
         
         // ===== OFFLINE STORAGE & SYNC =====
-        // Transistor SQLite database for offline storage
+        // C3: تجميع المواقع قبل الرفع لتقليل network calls و Firestore writes
+        // كل 5 locations تتجمع في batch واحد ثم ترفع. عند انقطاع الشبكة،
+        // SQLite تخزن المواقع وترفعها لما الشبكة ترجع.
         autoSync: true,              // Auto-sync to server when online
-        autoSyncThreshold: 1,        // Sync after 5 locations
-        batchSync: false,             // Batch multiple locations
+        autoSyncThreshold: 5,        // تجميع 5 مواقع قبل الإرسال (كان 1)
+        batchSync: true,             // batch المواقع المتعددة في request واحد (كان false)
         maxBatchSize: 50,            // Max 50 locations per batch
         maxDaysToPersist: 7,         // Keep locations for 7 days
         maxRecordsToPersist: 10000,  // Max 10k records in SQLite
@@ -151,7 +161,11 @@ class LocationService {
       // Register location listener
       console.log('[LocationService] Registering location listeners...');
       BackgroundGeolocation.onLocation(this.onLocation.bind(this), this.onLocationError.bind(this));
-      console.log('[LocationService] Location listeners registered');
+      
+      // C3: تسجيل heartbeat handler — يحدث lastUpdate كل دقيقة
+      // عشان Cloud Function ما تظن السائق توقف عن التتبع لو وقف
+      BackgroundGeolocation.onHeartbeat(this.onHeartbeat.bind(this));
+      console.log('[LocationService] Location listeners + heartbeat registered');
       
       return true;
     } catch (error) {
@@ -408,6 +422,53 @@ class LocationService {
 
   onLocationError(error) {
     console.error('[LocationService] Location error:', error);
+  }
+  
+  /**
+   * C3: Heartbeat — يطلق كل 60 ثانية حتى لو السائق متوقف
+   * يحدث lastUpdate فقط (بدون locationHistory write)
+   * هذا يبقي monitorDrivers Cloud Function راضية ويوفر آلاف الـ writes
+   */
+  async onHeartbeat(event) {
+    try {
+      if (!this.currentDriverId) {
+        return;
+      }
+      
+      console.log('[LocationService] Heartbeat — pinging lastUpdate');
+      
+      // تحديث خفيف فقط — مجرد إثبات أن التطبيق شغال
+      const updateData = {
+        lastUpdate: new Date(),
+        isActive: true,
+      };
+      
+      // إذا الـ heartbeat جاب موقع محدث، نحدثه أيضاً (بدون حفظ في history)
+      if (event && event.location && event.location.coords) {
+        updateData.latitude = event.location.coords.latitude;
+        updateData.longitude = event.location.coords.longitude;
+        updateData.speed = event.location.coords.speed || 0;
+        updateData.accuracy = event.location.coords.accuracy;
+        updateData.heading = event.location.coords.heading || -1;
+        updateData.location = {
+          latitude: event.location.coords.latitude,
+          longitude: event.location.coords.longitude,
+          accuracy: event.location.coords.accuracy,
+          speed: event.location.coords.speed || 0,
+          heading: event.location.coords.heading || 0,
+        };
+      }
+      
+      await firestore()
+        .collection('drivers')
+        .doc(this.currentDriverId)
+        .set(updateData, { merge: true });
+      
+      console.log('[LocationService] Heartbeat ping saved');
+    } catch (error) {
+      console.error('[LocationService] Heartbeat error:', error);
+      // لا نرمي الخطأ — heartbeat اختياري
+    }
   }
 
   async updateDriverStatus(isActive) {
