@@ -196,15 +196,11 @@ const LoginScreen = ({ navigation }) => {
         contentContainerStyle={styles.scrollContent}
         keyboardShouldPersistTaps="handled">
         
-        {/* Header with gradient background */}
+        {/* Header — White Horse branding */}
         <View style={styles.header}>
-          <Image
-            source={require('../assets/taxi_illustration.png')}
-            style={styles.taxiImage}
-            resizeMode="contain"
-          />
-          <Text style={styles.title}>إدارة حساب السائق</Text>
-          <Text style={styles.subtitle}>مرحباً بك</Text>
+          <Text style={styles.logoEmoji}>🐎</Text>
+          <Text style={styles.title}>White Horse</Text>
+          <Text style={styles.subtitle}>تطبيق السائق</Text>
         </View>
 
         {/* Login Form */}
@@ -264,23 +260,23 @@ const styles = StyleSheet.create({
     flexGrow: 1,
   },
   header: {
-    backgroundColor: '#FFC107',
+    backgroundColor: '#10b981',
     paddingTop: 60,
     paddingBottom: 40,
     paddingHorizontal: 20,
     borderBottomLeftRadius: 30,
     borderBottomRightRadius: 30,
     alignItems: 'center',
-    shadowColor: '#000',
+    shadowColor: '#047857',
     shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.1,
+    shadowOpacity: 0.2,
     shadowRadius: 8,
     elevation: 5,
   },
-  taxiImage: {
-    width: 200,
-    height: 150,
-    marginBottom: 20,
+  logoEmoji: {
+    fontSize: 90,
+    marginBottom: 12,
+    textAlign: 'center',
   },
   title: {
     fontSize: 28,
@@ -326,14 +322,14 @@ const styles = StyleSheet.create({
     elevation: 2,
   },
   button: {
-    backgroundColor: '#FFC107',
+    backgroundColor: '#10b981',
     padding: 18,
     borderRadius: 12,
     alignItems: 'center',
     marginTop: 20,
-    shadowColor: '#FFC107',
+    shadowColor: '#10b981',
     shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
+    shadowOpacity: 0.35,
     shadowRadius: 8,
     elevation: 5,
   },
