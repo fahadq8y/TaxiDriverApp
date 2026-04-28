@@ -495,9 +495,9 @@ class LocationService {
       // 💾 حفظ في locationHistory فقط إذا الشروط موجودة
       if (this.shouldSaveToHistory(location)) {
         try {
-          // V3: تواريخ انتهاء أقصر للنقاط الكثيرة (30 يوم بدل 60)
+          // V3: تاريخ انتهاء = شهرين (60 يوم) - يطابق سياسة الاحتفاظ في cleanup script
           const expiryDate = new Date();
-          expiryDate.setDate(expiryDate.getDate() + 30);
+          expiryDate.setDate(expiryDate.getDate() + 60);
           
           await firestore()
             .collection('locationHistory')
