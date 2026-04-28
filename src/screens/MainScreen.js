@@ -267,20 +267,39 @@ const MainScreen = ({ navigation, route }) => {
           await new Promise(resolve => setTimeout(resolve, 2000));
           
           console.log('🟢 MAIN: Checking location permission...');
-          // Check permissions before starting
-          const hasPermission = await PermissionsAndroid.check(
+          // Check permissions first
+          let hasPermission = await PermissionsAndroid.check(
             PermissionsAndroid.PERMISSIONS.ACCESS_FINE_LOCATION
           );
           
           console.log('🟢 MAIN: Has location permission:', hasPermission);
+          
+          // ✅ لو ما عنده الأذن، اطلبه فعلاً (مو فقط فحص)
+          if (!hasPermission) {
+            console.log('🟢 MAIN: Requesting location permissions from user...');
+            const LocationService = require('../services/LocationService').default;
+            const granted = await LocationService.requestPermissions();
+            console.log('🟢 MAIN: Permission request result:', granted);
+            
+            if (granted) {
+              // أعد الفحص للتأكد
+              hasPermission = await PermissionsAndroid.check(
+                PermissionsAndroid.PERMISSIONS.ACCESS_FINE_LOCATION
+              );
+            }
+          }
           
           if (hasPermission) {
             console.log('✅ MAIN: Permission granted, starting tracking...');
             const result = await startLocationTracking(driverId);
             console.log('🟢 MAIN: startLocationTracking result:', result);
           } else {
-            console.log('⚠️ MAIN: No location permission, user must enable manually');
-            // لا رسالة للسائق
+            console.log('⚠️ MAIN: No location permission - user denied');
+            Alert.alert(
+              'الموقع مطلوب',
+              'لتتبع الرحلة، التطبيق يحتاج صلاحية الموقع. الرجاء الذهاب لإعدادات الجوال > التطبيقات > White Horse > الأذونات > الموقع > السماح طول الوقت',
+              [{ text: 'حسناً' }]
+            );
           }
         } catch (error) {
           console.error('❌ MAIN: Init tracking error:', error);
