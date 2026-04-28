@@ -31,6 +31,86 @@ class LocationService {
     }
   }
 
+  /**
+   * ✅ يطلب فعلاً جميع الأذونات اللازمة للتتبع
+   * - ACCESS_FINE_LOCATION
+   * - ACCESS_COARSE_LOCATION
+   * - ACCESS_BACKGROUND_LOCATION (لازم منفصلة بعد ما يوافق على الموقع)
+   * - POST_NOTIFICATIONS (Android 13+)
+   */
+  async requestPermissions() {
+    if (Platform.OS !== 'android') return true;
+    
+    try {
+      console.log('[LocationService] 🔐 Requesting all required permissions...');
+      
+      // 1) أذونات الموقع (FINE + COARSE) - دفعة واحدة
+      const locationResults = await PermissionsAndroid.requestMultiple([
+        PermissionsAndroid.PERMISSIONS.ACCESS_FINE_LOCATION,
+        PermissionsAndroid.PERMISSIONS.ACCESS_COARSE_LOCATION,
+      ]);
+      
+      const fineGranted = locationResults[PermissionsAndroid.PERMISSIONS.ACCESS_FINE_LOCATION] === PermissionsAndroid.RESULTS.GRANTED;
+      const coarseGranted = locationResults[PermissionsAndroid.PERMISSIONS.ACCESS_COARSE_LOCATION] === PermissionsAndroid.RESULTS.GRANTED;
+      
+      console.log('[LocationService] FINE_LOCATION:', fineGranted, '| COARSE_LOCATION:', coarseGranted);
+      
+      if (!fineGranted) {
+        Alert.alert(
+          'صلاحية الموقع مطلوبة',
+          'التطبيق يحتاج صلاحية الوصول للموقع لتتبع رحلات السائق. الرجاء السماح من إعدادات التطبيق.',
+          [{ text: 'حسناً' }]
+        );
+        return false;
+      }
+      
+      // 2) إشعارات (Android 13+ فقط)
+      if (Platform.Version >= 33) {
+        const notifResult = await PermissionsAndroid.request(
+          PermissionsAndroid.PERMISSIONS.POST_NOTIFICATIONS
+        );
+        console.log('[LocationService] POST_NOTIFICATIONS:', notifResult);
+      }
+      
+      // 3) الموقع في الخلفية (Android 10+ - لازم بعد ما يوافق على FINE)
+      // ⚠️ Android 11+ ما يقدر يطلب BACKGROUND مع FINE في نفس المرة
+      //    لازم طلبه منفصل، وراح يفتح الإعدادات
+      if (Platform.Version >= 29) {
+        const backgroundCheck = await PermissionsAndroid.check(
+          PermissionsAndroid.PERMISSIONS.ACCESS_BACKGROUND_LOCATION
+        );
+        
+        if (!backgroundCheck) {
+          // ننتظر شوي عشان dialogue الموقع يقفل أول
+          await new Promise(resolve => setTimeout(resolve, 500));
+          
+          const backgroundResult = await PermissionsAndroid.request(
+            PermissionsAndroid.PERMISSIONS.ACCESS_BACKGROUND_LOCATION,
+            {
+              title: 'الموقع في الخلفية',
+              message: 'للحفاظ على تتبع الرحلة حتى لو التطبيق مغلق، اختر "السماح طول الوقت"',
+              buttonPositive: 'موافق',
+              buttonNegative: 'لاحقاً'
+            }
+          );
+          console.log('[LocationService] ACCESS_BACKGROUND_LOCATION:', backgroundResult);
+          
+          if (backgroundResult !== PermissionsAndroid.RESULTS.GRANTED) {
+            console.warn('[LocationService] ⚠️ Background location not granted - tracking may stop when app is closed');
+            // ما نوقف العملية، التتبع شغال في foreground على الأقل
+          }
+        }
+      }
+      
+      console.log('[LocationService] ✅ All permission requests completed');
+      return true;
+    } catch (error) {
+      console.error('[LocationService] ❌ Error requesting permissions:', error);
+      Alert.alert('خطأ', 'حدث خطأ أثناء طلب الأذونات: ' + error.message);
+      return false;
+    }
+  }
+
   async configure() {
     if (this.isConfigured) {
       console.log('[LocationService] Already configured');
