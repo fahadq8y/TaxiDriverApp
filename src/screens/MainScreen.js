@@ -126,6 +126,17 @@ const MainScreen = ({ navigation, route }) => {
             console.log('Local:', localSession);
             console.log('Remote:', remoteSession);
             
+            // ✅ إيقاف تتبع الموقع فوراً قبل الـ logout
+            // (السائق دخل من جوال آخر، فلا داعي لاستمرار التتبع من هذا الجهاز)
+            try {
+              console.log('🛑 SESSION_MISMATCH: Stopping LocationService...');
+              await LocationService.stop();
+              console.log('✅ SESSION_MISMATCH: LocationService stopped');
+            } catch (stopError) {
+              console.error('❌ SESSION_MISMATCH: Failed to stop LocationService:', stopError);
+              // نكمل عملية الـ logout حتى لو فشل الإيقاف
+            }
+            
             Alert.alert(
               'تنبيه',
               'تم تسجيل دخولك من جهاز آخر',
