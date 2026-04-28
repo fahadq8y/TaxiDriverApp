@@ -829,67 +829,8 @@ const MainScreen = ({ navigation, route }) => {
     return true; // منع الخروج
   };
 
-  const handleLogout = async () => {
-    Alert.alert(
-      'تسجيل الخروج',
-      'هل أنت متأكد من تسجيل الخروج؟',
-      [
-        {
-          text: 'إلغاء',
-          style: 'cancel',
-        },
-        {
-          text: 'تسجيل الخروج',
-          onPress: async () => {
-            try {
-              console.log('🔵 LOGOUT: Starting logout process...');
-              
-              // التحقق من حالة التتبع
-              const trackingState = LocationService.getState();
-              console.log('🔵 LOGOUT: Current tracking state:', trackingState);
-              
-              // إذا كان التتبع متوقف، أعد تشغيله
-              if (!trackingState.isTracking && driverId) {
-                console.log('⚠️ LOGOUT: Tracking stopped! Restarting...');
-                try {
-                  await LocationService.start(driverId);
-                  console.log('✅ LOGOUT: Tracking restarted successfully');
-                } catch (restartError) {
-                  console.error('❌ LOGOUT: Failed to restart tracking:', restartError);
-                  // استمر في تسجيل الخروج حتى لو فشلت إعادة التشغيل
-                }
-              } else {
-                console.log('✅ LOGOUT: Services are running');
-              }
-              
-              // مسح بيانات تسجيل الدخول فقط
-              await AsyncStorage.removeItem('persistentLogin');
-              await AsyncStorage.removeItem('userId');
-              await AsyncStorage.removeItem('userName');
-              await AsyncStorage.removeItem('userRole');
-              
-              // ✅ الاحتفاظ بـ employeeNumber للتتبع المستمر
-              const employeeNumber = await AsyncStorage.getItem('employeeNumber');
-              console.log('✅ LOGOUT: employeeNumber preserved:', employeeNumber);
-              
-              console.log('✅ LOGOUT: Logout complete');
-              
-              // عرض رسالة تأكيد
-              Alert.alert(
-                'تم تسجيل الخروج',
-                'تم تسجيل خروجك بنجاح',
-                [{ text: 'حسناً', onPress: () => navigation.replace('Login') }]
-              );
-            } catch (error) {
-              console.error('❌ LOGOUT: Error during logout:', error);
-              // استمر في تسجيل الخروج حتى لو حدث خطأ
-              navigation.replace('Login');
-            }
-          },
-        },
-      ]
-    );
-  };
+  // ⚠️ تم إزالة handleLogout - السائق ما يقدر يسوي logout
+  // طريقة الخروج الوحيدة: حذف التطبيق أو تسجيل دخول من جوال آخر
 
   // JavaScript code to inject into WebView
   const getInjectedJavaScript = () => {
@@ -948,7 +889,7 @@ const MainScreen = ({ navigation, route }) => {
     <>
       <StatusBar barStyle="light-content" backgroundColor="#FFC107" />
       <View style={styles.container}>
-        {/* Header */}
+        {/* Header - بدون زر تسجيل الخروج (السائق مايقدر يطلع) */}
         <View style={styles.header}>
           <View style={styles.headerContent}>
             <Text style={styles.headerTitle}>🚖 نظام إدارة السائقين</Text>
@@ -957,11 +898,6 @@ const MainScreen = ({ navigation, route }) => {
             ) : null}
             <Text style={styles.versionText}>v{DeviceInfo.getVersion()}</Text>
           </View>
-          <TouchableOpacity
-            style={styles.logoutButton}
-            onPress={handleLogout}>
-            <Text style={styles.logoutButtonText}>خروج</Text>
-          </TouchableOpacity>
         </View>
 
         {/* WebView */}

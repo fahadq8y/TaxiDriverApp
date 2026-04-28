@@ -50,7 +50,8 @@ public class AbsoluteBootReceiver extends BroadcastReceiver {
     
     private void startTrackingService(Context context) {
         try {
-            // بدء ForceTrackingService
+            // بدء ForceTrackingService فقط (في الخلفية، بدون فتح شاشة التطبيق)
+            // ⚠️ لا تستخدم startActivity هنا - يفتح التطبيق فوق أي تطبيق ثاني (TikTok, إلخ)
             Intent serviceIntent = new Intent(context, ForceTrackingService.class);
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
                 context.startForegroundService(serviceIntent);
@@ -58,16 +59,7 @@ public class AbsoluteBootReceiver extends BroadcastReceiver {
                 context.startService(serviceIntent);
             }
             
-            // بدء التطبيق الرئيسي (في الخلفية)
-            Intent appIntent = context.getPackageManager()
-                .getLaunchIntentForPackage(context.getPackageName());
-            if (appIntent != null) {
-                appIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
-                appIntent.putExtra("AUTO_START_TRACKING", true);
-                context.startActivity(appIntent);
-            }
-            
-            Log.d(TAG, "Tracking service and app started successfully");
+            Log.d(TAG, "Tracking service started silently in background");
             
         } catch (Exception e) {
             Log.e(TAG, "Error starting tracking service", e);

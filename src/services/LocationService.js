@@ -225,13 +225,20 @@ class LocationService {
         maxDaysToPersist: 7,         // Keep locations for 7 days
         maxRecordsToPersist: 10000,  // Max 10k records in SQLite
         
-        // ===== ACTIVITY RECOGNITION (Battery Saving) =====
-        stopTimeout: 15,              // Stop tracking after 5 minutes of no movement
-        stopDetectionDelay: 1,       // Wait 1 minute before detecting stop
-        disableStopDetection: false, // Enable stop detection
+        // ===== ACTIVITY RECOGNITION & SMART STOP DETECTION =====
+        // V3 PRO: استغلال activity recognition من Google Play Services
+        // (still / on_foot / on_bicycle / in_vehicle / running)
+        stopTimeout: 5,                       // اعتبر السائق متوقف بعد 5 دقائق من السكون
+        stopDetectionDelay: 1,                // ابدأ تحليل التوقف بعد دقيقة واحدة من الثبات
+        disableStopDetection: false,          // فعل اكتشاف التوقف الذكي
+        disableMotionActivityUpdates: false,  // فعل activity recognition (driving/walking/still)
+        activityRecognitionInterval: 10000,   // افحص النشاط كل 10 ثوان
+        minimumActivityConfidence: 60,        // ثقة 60%+ لتغيير الحالة
         
         // ===== MOTION DETECTION =====
-        preventSuspend: true,        // Prevent app suspension
+        preventSuspend: true,                 // منع تعليق التطبيق
+        useSignificantChangesOnly: false,     // استخدم كل التحديثات
+        pausesLocationUpdatesAutomatically: false, // ما توقف لما السائق ساكن (نتحكم بنفسنا)
       });
 
       console.log('[LocationService] Configuration successful');
@@ -367,44 +374,58 @@ class LocationService {
     }
   }
 
-  // Check if we should save this location to history
+  // V3 PRO: حفظ ذكي - فقط نقاط ذات معنى
+  // - السائق متوقف؟ ما نحفظ شيء (نقطة دخول واحدة عند التوقف فقط)
+  // - السائق يتحرك؟ احفظ كل 50 متر أو دقيقة
+  // - يقلل locationHistory من ~144 نقطة/12 ساعة توقف إلى نقطة وحدة فقط
   shouldSaveToHistory(location) {
     const now = Date.now();
     const currentLat = location.coords.latitude;
     const currentLng = location.coords.longitude;
-    // Handle null/undefined speed values safely
-    const currentSpeed = location.coords.speed ?? 0; // m/s - use nullish coalescing
+    const currentSpeed = location.coords.speed ?? 0;
+    const isMoving = location.is_moving === true || currentSpeed >= 0.83; // 3 km/h
     
-    // Save if it's the first location
+    // أول نقطة دائماً تحفظ
     if (!this.lastHistorySaveTime || !this.lastHistorySaveLocation) {
+      this.lastIsMoving = isMoving;
       return true;
     }
     
     const timeDiff = now - this.lastHistorySaveTime;
+    const wasMoving = this.lastIsMoving === true;
     
-    // Smart Stop Detection: إذا السائق متوقف (speed < 1 km/h = 0.28 m/s)
-    if (currentSpeed < 0.28) {
-      // احفظ كل 5 دقائق فقط (12 نقطة/ساعة)
-      if (timeDiff >= 300000) { // 5 minutes
-        console.log('[shouldSaveToHistory] Driver stopped - saving after 5 minutes');
+    // 🚦 احفظ نقطة "تغير حالة" - من حركة لتوقف أو العكس
+    if (wasMoving !== isMoving) {
+      console.log(`[shouldSaveToHistory] State change: moving=${wasMoving}→${isMoving} - saving transition point`);
+      this.lastIsMoving = isMoving;
+      return true;
+    }
+    
+    // 🛑 السائق متوقف: ما نحفظ شيء (heartbeat يحدث lastUpdate)
+    if (!isMoving) {
+      // فقط backup: لو مرّت ساعة كاملة بدون أي تحديث، احفظ نقطة "ما زال متوقف هنا"
+      if (timeDiff >= 3600000) { // 1 hour
+        console.log('[shouldSaveToHistory] Stopped > 1hr - backup point');
         return true;
       }
-    } else {
-      // إذا السائق يتحرك
-      // احفظ كل دقيقة (60 نقطة/ساعة)
-      if (timeDiff >= 60000) { // 1 minute
-        console.log('[shouldSaveToHistory] Driver moving - saving after 1 minute');
-        return true;
-      }
-      
-      // أو إذا تحرك 50 متر
-      const lastLat = this.lastHistorySaveLocation.latitude;
-      const lastLng = this.lastHistorySaveLocation.longitude;
-      const distance = this.calculateDistance(lastLat, lastLng, currentLat, currentLng);
-      if (distance >= 50) { // 50 meters
-        console.log(`[shouldSaveToHistory] Driver moved ${Math.round(distance)}m - saving`);
-        return true;
-      }
+      return false;
+    }
+    
+    // 🚗 السائق يتحرك: احفظ كل دقيقة أو 50 متر
+    if (timeDiff >= 60000) {
+      console.log('[shouldSaveToHistory] Moving - 1min elapsed');
+      return true;
+    }
+    
+    const distance = this.calculateDistance(
+      this.lastHistorySaveLocation.latitude,
+      this.lastHistorySaveLocation.longitude,
+      currentLat,
+      currentLng
+    );
+    if (distance >= 50) {
+      console.log(`[shouldSaveToHistory] Moving - ${Math.round(distance)}m`);
+      return true;
     }
     
     return false;
@@ -428,14 +449,24 @@ class LocationService {
 
   async onLocation(location) {
     try {
-      console.log('[LocationService] Location received:', location.coords);
+      const speed = location.coords.speed ?? 0;
+      const isMoving = location.is_moving === true || speed >= 0.83;
+      const activity = (location.activity && location.activity.type) || 'unknown';
+      const activityConfidence = (location.activity && location.activity.confidence) || 0;
+      
+      console.log('[LocationService] Location received:', {
+        speed: speed.toFixed(2),
+        isMoving,
+        activity,
+        confidence: activityConfidence
+      });
       
       if (!this.currentDriverId) {
         console.warn('[LocationService] No driver ID set, skipping location save');
         return;
       }
 
-      // Save to Firestore with set + merge to ensure document exists
+      // ✅ تحديث الـ driver document (للعرض الحي في الإدارة)
       await firestore()
         .collection('drivers')
         .doc(this.currentDriverId)
@@ -444,27 +475,29 @@ class LocationService {
             latitude: location.coords.latitude,
             longitude: location.coords.longitude,
             accuracy: location.coords.accuracy,
-            speed: location.coords.speed || 0,
+            speed: speed,
             heading: location.coords.heading || 0,
           },
-          // Also save location directly in driver document (for easy access)
           latitude: location.coords.latitude,
           longitude: location.coords.longitude,
-          speed: location.coords.speed || 0,
+          speed: speed,
           accuracy: location.coords.accuracy,
           heading: location.coords.heading || -1,
+          isMoving: isMoving,                    // V3: حالة الحركة
+          currentActivity: activity,             // V3: النشاط الحالي (in_vehicle/still/walking/etc)
+          activityConfidence: activityConfidence,
           lastUpdate: new Date(),
           isActive: true,
         }, { merge: true });
 
-      console.log('[LocationService] Location saved to Firestore');
+      console.log('[LocationService] Driver document updated');
       
-      // Save to locationHistory if conditions are met
+      // 💾 حفظ في locationHistory فقط إذا الشروط موجودة
       if (this.shouldSaveToHistory(location)) {
         try {
-          // Calculate expiry date (2 months from now)
+          // V3: تواريخ انتهاء أقصر للنقاط الكثيرة (30 يوم بدل 60)
           const expiryDate = new Date();
-          expiryDate.setMonth(expiryDate.getMonth() + 2);
+          expiryDate.setDate(expiryDate.getDate() + 30);
           
           await firestore()
             .collection('locationHistory')
@@ -473,30 +506,30 @@ class LocationService {
               latitude: location.coords.latitude,
               longitude: location.coords.longitude,
               accuracy: location.coords.accuracy || 0,
-              speed: location.coords.speed || 0,
+              speed: speed,
               heading: location.coords.heading || 0,
+              isMoving: isMoving,              // V3: مهم لحساب ساعات القيادة الحقيقية
+              activity: activity,              // V3: نوع النشاط
+              activityConfidence: activityConfidence,
               timestamp: new Date(),
-              expiryDate: expiryDate,
+              expiryDate: expiryDate,          // V3: 30 يوم بدلاً من 60
               appState: 'active',
               userId: this.currentDriverId,
             });
           
-          // Update last save time and location
           this.lastHistorySaveTime = Date.now();
           this.lastHistorySaveLocation = {
             latitude: location.coords.latitude,
             longitude: location.coords.longitude,
           };
           
-          console.log('[LocationService] Location saved to history');
+          console.log('[LocationService] History point saved');
         } catch (historyError) {
           console.error('[LocationService] Error saving to history:', historyError);
-          // Don't throw - just log the error
         }
       }
     } catch (error) {
       console.error('[LocationService] Error saving location:', error);
-      // Don't throw - just log the error
     }
   }
 

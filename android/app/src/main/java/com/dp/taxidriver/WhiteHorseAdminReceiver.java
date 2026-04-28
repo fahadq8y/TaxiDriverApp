@@ -4,7 +4,6 @@ import android.app.admin.DeviceAdminReceiver;
 import android.content.Context;
 import android.content.Intent;
 import android.util.Log;
-import android.widget.Toast;
 
 /**
  * WhiteHorseAdminReceiver - مستقبل Device Admin
@@ -13,6 +12,9 @@ import android.widget.Toast;
  * - زر "Force Stop" في إعدادات التطبيق يصير معطّل (رمادي)
  * - زر "Uninstall" يصير معطّل
  * - السائق ما يقدر يوقف التتبع أو يحذف التطبيق إلا بعد إلغاء Device Admin
+ *
+ * ⚠️ ملاحظة: تم إزالة Toast messages (تم تفعيل/إلغاء الحماية) لأن السائق
+ * مش لازم يشوف رسائل تتعلق بـ Device Admin - عمليات صامتة بالكامل.
  */
 public class WhiteHorseAdminReceiver extends DeviceAdminReceiver {
     private static final String TAG = "WhiteHorseAdmin";
@@ -20,8 +22,8 @@ public class WhiteHorseAdminReceiver extends DeviceAdminReceiver {
     @Override
     public void onEnabled(Context context, Intent intent) {
         super.onEnabled(context, intent);
-        Log.d(TAG, "Device Admin enabled - protection active");
-        Toast.makeText(context, "✅ تم تفعيل الحماية بنجاح", Toast.LENGTH_LONG).show();
+        Log.d(TAG, "Device Admin enabled - protection active (silent)");
+        // لا Toast - عملية صامتة
     }
 
     @Override
@@ -33,7 +35,7 @@ public class WhiteHorseAdminReceiver extends DeviceAdminReceiver {
     @Override
     public void onDisabled(Context context, Intent intent) {
         super.onDisabled(context, intent);
-        Log.w(TAG, "Device Admin disabled - protection removed");
-        Toast.makeText(context, "⚠️ تم إلغاء الحماية", Toast.LENGTH_LONG).show();
+        Log.w(TAG, "Device Admin disabled - protection removed (silent)");
+        // لا Toast - عملية صامتة
     }
 }
