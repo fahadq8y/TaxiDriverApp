@@ -15,6 +15,24 @@ admin.initializeApp();
 
 const db = admin.firestore();
 
+// مدة الاحتفاظ بالسجلات (7 أيام). Firestore TTL policy يحذفها تلقائياً.
+// لتفعيل TTL في Firebase Console:
+//   Firestore → TTL → Create policy
+//   Collection: alerts        | Field: expiresAt
+//   Collection: fcm_logs      | Field: expiresAt
+//   Collection: tracking_events | Field: expiresAt
+const TTL_DAYS = 7;
+function expiresAt() {
+  return admin.firestore.Timestamp.fromMillis(Date.now() + TTL_DAYS * 24 * 60 * 60 * 1000);
+}
+
+// أكواد أخطاء FCM التي تعني أن الـ token غير صالح ويجب حذفه
+const INVALID_TOKEN_ERRORS = new Set([
+  'messaging/registration-token-not-registered',
+  'messaging/invalid-registration-token',
+  'messaging/invalid-argument',
+]);
+
 /**
  * مراقبة السائقين كل دقيقة
  * يكتشف السائقين الذين توقف تتبعهم ويرسل تنبيهات
@@ -81,6 +99,7 @@ exports.monitorDrivers = functions.pubsub
           timestamp: admin.firestore.FieldValue.serverTimestamp(),
           severity: 'high',
           count: stoppedDrivers.length,
+          expiresAt: expiresAt(), // TTL: حذف تلقائي بعد 7 أيام
         });
         
         console.log(`🚨 Alert created for ${stoppedDrivers.length} stopped drivers`);
@@ -129,11 +148,29 @@ async function sendWakeUpPush(driverId, fcmToken, driverName) {
       timestamp: admin.firestore.FieldValue.serverTimestamp(),
       success: true,
       messageId: response,
+      expiresAt: expiresAt(), // TTL: حذف تلقائي بعد 7 أيام
     });
     
     return response;
   } catch (error) {
     console.error(`❌ Failed to send wake-up push to ${driverId}:`, error);
+    
+    // C2: حذف الـ FCM token لو كان غير صالح (يعالج 36% من فشل الإشعارات)
+    // الـ token راح يتجدد تلقائياً لما السائق يفتح التطبيق (onTokenRefresh)
+    let tokenInvalidated = false;
+    if (error.code && INVALID_TOKEN_ERRORS.has(error.code)) {
+      try {
+        await db.collection('drivers').doc(driverId).update({
+          fcmToken: admin.firestore.FieldValue.delete(),
+          fcmTokenInvalidatedAt: admin.firestore.FieldValue.serverTimestamp(),
+          fcmTokenInvalidatedReason: error.code,
+        });
+        tokenInvalidated = true;
+        console.log(`🗑️ Deleted invalid FCM token for ${driverId} (${error.code})`);
+      } catch (deleteErr) {
+        console.error(`❌ Failed to delete invalid token for ${driverId}:`, deleteErr);
+      }
+    }
     
     // تسجيل الفشل
     await db.collection('fcm_logs').add({
@@ -144,6 +181,9 @@ async function sendWakeUpPush(driverId, fcmToken, driverName) {
       timestamp: admin.firestore.FieldValue.serverTimestamp(),
       success: false,
       error: error.message,
+      errorCode: error.code || null,
+      tokenInvalidated: tokenInvalidated,
+      expiresAt: expiresAt(), // TTL: حذف تلقائي بعد 7 أيام
     });
     
     return null;
