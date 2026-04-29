@@ -244,6 +244,12 @@ class LocationService {
         activityRecognitionInterval: 10000,   // افحص النشاط كل 10 ثوان
         minimumActivityConfidence: 60,        // ثقة 60%+ لتغيير الحالة
         
+        // ===== V4 STATIONARY GEOFENCE (v2.6.0) =====
+        // Transistor ينشئ تلقائياً geofence حول الموقع الحالي لما السائق يتوقف
+        // لما السائق يتحرك خارج هذا الـ geofence → يبدأ التتبع تلقائياً
+        // الفائدة: توفير بطارية كبير لما السائق نائم في المنزل
+        stationaryRadius: 50,                 // 50م حول نقطة التوقف (الافتراضي 25م)
+        
         // ===== MOTION DETECTION =====
         preventSuspend: true,                 // منع تعليق التطبيق
         useSignificantChangesOnly: false,     // استخدم كل التحديثات
