@@ -165,9 +165,10 @@
             </intent-filter>
         </receiver>
 
-        <!-- ===== SERVICE CHECK RECEIVER ===== -->
-        <!-- يفحص الخدمة كل دقيقة -->
-        <receiver android:name=".ForceTrackingService$ServiceCheckReceiver" />
+        <!-- ===== ServiceCheckReceiver REMOVED in v2.5.10 ===== -->
+        <!-- كان يستيقظ كل دقيقة عبر AlarmManager ويسبب فتح التطبيق التلقائي -->
+        <!-- على الأجهزة التي فعّلت Display over other apps. التتبع الفعلي -->
+        <!-- يعتمد على Transistor BackgroundGeolocation. -->
 
     </application>
 </manifest>

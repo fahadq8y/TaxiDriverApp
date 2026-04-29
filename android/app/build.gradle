@@ -83,13 +83,16 @@ android {
     compileSdk rootProject.ext.compileSdkVersion
 
     namespace "com.dp.taxidriver"
-    // ✅ تحديث تلقائي للإصدار: يقرأ رقم البناء من GitHub Actions
-    // - في CI: GITHUB_RUN_NUMBER يأتي تلقائياً (مثلاً 7, 8, 9, ...)
-    // - محلياً (بدون CI): يستخدم 0 → versionCode=200, versionName=2.5.0
+    // ✅ v2.5.10+: المصدر الواحد للإصدار = package.json
+    // - versionName يقرأ من package.json (نفس اللي يظهر في LoginScreen)
+    // - versionCode تلقائي من GITHUB_RUN_NUMBER (Android يحتاج رقم متزايد)
     // - offset = 200 يضمن إن الـ versionCode أكبر من القديم (24) فيقبل Android التحديث
+    // - لرفع إصدار جديد: عدّل "version" في package.json فقط، كل شي يتزامن
     def runNumber = (System.getenv("GITHUB_RUN_NUMBER") ?: "0").toInteger()
     def autoVersionCode = 200 + runNumber
-    def autoVersionName = "2.5." + runNumber
+    def packageJsonFile = file("$rootDir/../package.json")
+    def packageJsonText = packageJsonFile.text
+    def autoVersionName = (packageJsonText =~ /"version"\s*:\s*"([^"]+)"/)[0][1]
 
     defaultConfig {
         applicationId "com.dp.taxidriver"
