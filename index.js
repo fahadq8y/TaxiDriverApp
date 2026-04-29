@@ -37,30 +37,32 @@ const shouldSaveToHistory = async (location) => {
   const currentLng = location.coords.longitude;
   // Handle null/undefined speed values safely
   const currentSpeed = location.coords.speed ?? 0; // m/s - use nullish coalescing
-  
+
   try {
     // Read last save time and location from AsyncStorage
     const lastTimeStr = await AsyncStorage.getItem('lastHistorySaveTime');
     const lastLocationStr = await AsyncStorage.getItem('lastHistorySaveLocation');
-    
+
     // Save if it's the first location
     if (!lastTimeStr || !lastLocationStr) {
       console.log('[shouldSaveToHistory] First location - will save');
       return true;
     }
-    
+
     const lastHistorySaveTime = parseInt(lastTimeStr, 10);
     const lastHistorySaveLocation = JSON.parse(lastLocationStr);
     const timeDiff = now - lastHistorySaveTime;
-    
+
     // Smart Stop Detection: إذا السائق متوقف (speed < 1 km/h = 0.28 m/s)
     if (currentSpeed < 0.28) {
-      // احفظ كل 5 دقائق فقط (12 نقطة/ساعة)
-      if (timeDiff >= 300000) { // 5 minutes
+      // v2.5.11: زدنا فترة الحفظ من 5د إلى 15د عندما يكون متوقف
+      // يقلل النقاط المكررة في المنزل من 12/ساعة إلى 4/ساعة
+      // (الويب يجمع التوقفات تلقائياً، لكن هذا يقلل الكلفة)
+      if (timeDiff >= 900000) { // 15 minutes
         console.log(`[shouldSaveToHistory] Driver stopped (${Math.round(currentSpeed*3.6)} km/h) - saving after ${Math.round(timeDiff/1000)}s`);
         return true;
       }
-      console.log(`[shouldSaveToHistory] Driver stopped - skip (${Math.round(timeDiff/1000)}s < 300s)`);
+      console.log(`[shouldSaveToHistory] Driver stopped - skip (${Math.round(timeDiff/1000)}s < 900s)`);
       return false;
     } else {
       // إذا السائق يتحرك
@@ -69,7 +71,7 @@ const shouldSaveToHistory = async (location) => {
         console.log(`[shouldSaveToHistory] Driver moving (${Math.round(currentSpeed*3.6)} km/h) - saving after ${Math.round(timeDiff/1000)}s`);
         return true;
       }
-      
+
       // أو إذا تحرك 50 متر
       const lastLat = lastHistorySaveLocation.latitude;
       const lastLng = lastHistorySaveLocation.longitude;
@@ -78,11 +80,11 @@ const shouldSaveToHistory = async (location) => {
         console.log(`[shouldSaveToHistory] Driver moved ${Math.round(distance)}m - saving`);
         return true;
       }
-      
+
       console.log(`[shouldSaveToHistory] Driver moving - skip (${Math.round(timeDiff/1000)}s < 60s, ${Math.round(distance)}m < 50m)`);
       return false;
     }
-    
+
   } catch (error) {
     console.error('[shouldSaveToHistory] Error:', error);
     // In case of error, save to be safe
@@ -93,25 +95,34 @@ const shouldSaveToHistory = async (location) => {
 // Register Headless Task for background tracking when app is terminated
 const HeadlessTask = async (event) => {
   const { name, params } = event;
-  
+
   console.log('[HeadlessTask] Event received:', name);
-  
+
   if (name === 'location') {
     const location = params;
     console.log('[HeadlessTask] Location received:', location.coords);
-    
+
     try {
       // Get driver ID from storage
       const AsyncStorage = require('@react-native-async-storage/async-storage').default;
       const driverId = await AsyncStorage.getItem('employeeNumber');
-      
+
       if (!driverId) {
         console.warn('[HeadlessTask] No driver ID found, skipping location save');
         return;
       }
-      
+
       console.log('[HeadlessTask] Saving location for driver:', driverId);
-      
+
+      // ✅ v2.5.11: استخراج isMoving + activity + confidence (نفس LocationService.js)
+      // قبل: HeadlessTask يحفظ فقط lat/lng/speed - بدون isMoving أو currentActivity
+      // النتيجة: 99.99% من النقاط (background) كانت activity='unknown' في الويب
+      // الحل: نحفظ نفس المعلومات مثل onLocation حتى يظهر التصنيف الصحيح في الخريطة
+      const speed = location.coords.speed ?? 0;
+      const isMoving = location.is_moving === true || speed >= 0.83; // 3 km/h
+      const activity = (location.activity && location.activity.type) || 'unknown';
+      const activityConfidence = (location.activity && location.activity.confidence) || 0;
+
       // Save to drivers collection (current location)
       await firestore()
         .collection('drivers')
@@ -121,28 +132,31 @@ const HeadlessTask = async (event) => {
             latitude: location.coords.latitude,
             longitude: location.coords.longitude,
             accuracy: location.coords.accuracy,
-            speed: location.coords.speed || 0,
+            speed: speed,
             heading: location.coords.heading || 0,
           },
           // Also save location directly in driver document (for easy access)
           latitude: location.coords.latitude,
           longitude: location.coords.longitude,
-          speed: location.coords.speed || 0,
+          speed: speed,
           accuracy: location.coords.accuracy,
           heading: location.coords.heading || -1,
+          isMoving: isMoving,                      // v2.5.11: حالة الحركة
+          currentActivity: activity,               // v2.5.11: النشاط الحالي
+          activityConfidence: activityConfidence,  // v2.5.11: ثقة النشاط
           lastUpdate: new Date(),
           isActive: true,
         }, { merge: true });
-      
+
       console.log('[HeadlessTask] Location saved successfully to drivers collection');
-      
+
       // Save to locationHistory if conditions are met
       if (await shouldSaveToHistory(location)) {
         try {
           // Calculate expiry date (2 months from now)
           const expiryDate = new Date();
           expiryDate.setMonth(expiryDate.getMonth() + 2);
-          
+
           await firestore()
             .collection('locationHistory')
             .add({
@@ -150,21 +164,25 @@ const HeadlessTask = async (event) => {
               latitude: location.coords.latitude,
               longitude: location.coords.longitude,
               accuracy: location.coords.accuracy || 0,
-              speed: location.coords.speed || 0,
+              speed: speed,
               heading: location.coords.heading || 0,
+              isMoving: isMoving,                      // v2.5.11: حالة الحركة
+              activity: activity,                      // v2.5.11: نوع النشاط
+              currentActivity: activity,               // v2.5.11: alias للتوافق مع driver-details
+              activityConfidence: activityConfidence,  // v2.5.11: ثقة النشاط
               timestamp: new Date(),
               expiryDate: expiryDate,
               appState: 'background',
               userId: driverId,
             });
-          
+
           // Update last save time and location in AsyncStorage
           await AsyncStorage.setItem('lastHistorySaveTime', Date.now().toString());
           await AsyncStorage.setItem('lastHistorySaveLocation', JSON.stringify({
             latitude: location.coords.latitude,
             longitude: location.coords.longitude,
           }));
-          
+
           console.log('[HeadlessTask] Location saved to locationHistory');
         } catch (historyError) {
           console.error('[HeadlessTask] Error saving to locationHistory:', historyError);
@@ -173,7 +191,7 @@ const HeadlessTask = async (event) => {
       } else {
         console.log('[HeadlessTask] Skipping locationHistory save (conditions not met)');
       }
-      
+
     } catch (error) {
       console.error('[HeadlessTask] Error saving location:', error);
     }
@@ -187,23 +205,23 @@ BackgroundGeolocation.registerHeadlessTask(HeadlessTask);
 // This handler is called when the app receives a push notification while in background/killed state
 messaging().setBackgroundMessageHandler(async remoteMessage => {
   console.log('[FCM] Background message received:', JSON.stringify(remoteMessage));
-  
+
   try {
     if (remoteMessage.data?.type === 'wake_up') {
       console.log('[FCM] Wake-up push received - attempting to restart tracking');
-      
+
       // Get driver ID from message or AsyncStorage
       const AsyncStorage = require('@react-native-async-storage/async-storage').default;
       const driverId = remoteMessage.data.driverId || await AsyncStorage.getItem('employeeNumber');
-      
+
       if (driverId) {
         console.log('[FCM] Driver ID:', driverId);
-        
+
         // Try to restart BackgroundGeolocation
         try {
           const state = await BackgroundGeolocation.start();
           console.log('[FCM] BackgroundGeolocation restarted successfully:', state);
-          
+
           // Log restart event to Firebase
           await firestore()
             .collection('tracking_events')
@@ -215,7 +233,7 @@ messaging().setBackgroundMessageHandler(async remoteMessage => {
             });
         } catch (bgError) {
           console.error('[FCM] Failed to restart BackgroundGeolocation:', bgError);
-          
+
           // Log failure
           await firestore()
             .collection('tracking_events')
@@ -234,9 +252,8 @@ messaging().setBackgroundMessageHandler(async remoteMessage => {
   } catch (error) {
     console.error('[FCM] Error handling background message:', error);
   }
-  
+
   return Promise.resolve();
 });
 
 console.log('[FCM] Background message handler registered');
-
