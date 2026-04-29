@@ -47,9 +47,15 @@ const MainScreen = ({ navigation, route }) => {
     // Setup FCM
     setupFCM();
     
-    // فحص التحديثات عند فتح التطبيق
-    setTimeout(() => {
-      UpdateChecker.checkForUpdates();
+    // فحص التحديثات عند فتح التطبيق (v2.6.0: نمرّر driverId للفلترة)
+    setTimeout(async () => {
+      try {
+        const empNum = await AsyncStorage.getItem('employeeNumber');
+        UpdateChecker.checkForUpdates(empNum);
+      } catch (e) {
+        console.warn('[MainScreen] Could not load driverId for UpdateChecker:', e);
+        UpdateChecker.checkForUpdates();
+      }
     }, 3000);
     
     // فحص Battery Optimization بعد 5 ثواني

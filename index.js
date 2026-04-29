@@ -28,22 +28,30 @@ const calculateDistance = (lat1, lon1, lat2, lon2) => {
   return R * c; // Distance in meters
 };
 
-// Check if we should save this location to history (using AsyncStorage for persistence)
-// Smart Stop Detection: يحفظ بشكل أقل عندما السائق متوقف
+// V4 PRO (v2.6.0): حفظ ذكي محسّن في HeadlessTask
+// نفس منطق LocationService.shouldSaveToHistory لكن مع AsyncStorage للمزامنة بين App وHeadless
+//
+// المشاكل اللي حلّيناها (من تحليل DRV030):
+//   - 41% نقاط مكررة (نفس مكان نفس ثانية)  → نمنعها
+//   - 7 ساعات نوم = 480 نقطة → نخليها ~14 نقطة (1 كل 30د)
+//   - 45% قفزات سرعة وهمية بسبب batch upload → دالة onLocation ترفض السرعة العالية
 const shouldSaveToHistory = async (location) => {
   const AsyncStorage = require('@react-native-async-storage/async-storage').default;
   const now = Date.now();
   const currentLat = location.coords.latitude;
   const currentLng = location.coords.longitude;
-  // Handle null/undefined speed values safely
-  const currentSpeed = location.coords.speed ?? 0; // m/s - use nullish coalescing
+  const currentSpeed = location.coords.speed ?? 0; // m/s
+  // V4: نعتمد على is_moving من Activity Recognition + activity=still
+  const isMoving = location.is_moving === true || currentSpeed >= 0.83; // 3 km/h
+  const activityType = (location.activity && location.activity.type) || 'unknown';
+  const isStill = activityType === 'still';
 
   try {
-    // Read last save time and location from AsyncStorage
     const lastTimeStr = await AsyncStorage.getItem('lastHistorySaveTime');
     const lastLocationStr = await AsyncStorage.getItem('lastHistorySaveLocation');
+    const lastIsMovingStr = await AsyncStorage.getItem('lastHistoryIsMoving');
 
-    // Save if it's the first location
+    // أول نقطة دائماً تحفظ
     if (!lastTimeStr || !lastLocationStr) {
       console.log('[shouldSaveToHistory] First location - will save');
       return true;
@@ -51,44 +59,54 @@ const shouldSaveToHistory = async (location) => {
 
     const lastHistorySaveTime = parseInt(lastTimeStr, 10);
     const lastHistorySaveLocation = JSON.parse(lastLocationStr);
+    const wasMoving = lastIsMovingStr === 'true';
     const timeDiff = now - lastHistorySaveTime;
 
-    // Smart Stop Detection: إذا السائق متوقف (speed < 1 km/h = 0.28 m/s)
-    if (currentSpeed < 0.28) {
-      // v2.5.11: زدنا فترة الحفظ من 5د إلى 15د عندما يكون متوقف
-      // يقلل النقاط المكررة في المنزل من 12/ساعة إلى 4/ساعة
-      // (الويب يجمع التوقفات تلقائياً، لكن هذا يقلل الكلفة)
-      if (timeDiff >= 900000) { // 15 minutes
-        console.log(`[shouldSaveToHistory] Driver stopped (${Math.round(currentSpeed*3.6)} km/h) - saving after ${Math.round(timeDiff/1000)}s`);
-        return true;
-      }
-      console.log(`[shouldSaveToHistory] Driver stopped - skip (${Math.round(timeDiff/1000)}s < 900s)`);
-      return false;
-    } else {
-      // إذا السائق يتحرك
-      // احفظ كل دقيقة
-      if (timeDiff >= 60000) { // 1 minute
-        console.log(`[shouldSaveToHistory] Driver moving (${Math.round(currentSpeed*3.6)} km/h) - saving after ${Math.round(timeDiff/1000)}s`);
-        return true;
-      }
-
-      // أو إذا تحرك 50 متر
-      const lastLat = lastHistorySaveLocation.latitude;
-      const lastLng = lastHistorySaveLocation.longitude;
-      const distance = calculateDistance(lastLat, lastLng, currentLat, currentLng);
-      if (distance >= 50) { // 50 meters
-        console.log(`[shouldSaveToHistory] Driver moved ${Math.round(distance)}m - saving`);
-        return true;
-      }
-
-      console.log(`[shouldSaveToHistory] Driver moving - skip (${Math.round(timeDiff/1000)}s < 60s, ${Math.round(distance)}m < 50m)`);
+    // 🛑 V4: منع التكرار التام (<5م في <5 ثوان)
+    const distance = calculateDistance(
+      lastHistorySaveLocation.latitude,
+      lastHistorySaveLocation.longitude,
+      currentLat, currentLng
+    );
+    if (distance < 5 && timeDiff < 5000) {
+      console.log('[shouldSaveToHistory] Duplicate point - skipping');
       return false;
     }
 
+    // 🚦 احفظ نقطة "تغيّر حالة" - حركة↔توقف
+    if (lastIsMovingStr !== null && wasMoving !== isMoving) {
+      console.log(`[shouldSaveToHistory] State change moving=${wasMoving}→${isMoving} - saving transition`);
+      return true;
+    }
+
+    // 🛑 السائق متوقف فعلاً (isMoving=false أو activity=still)
+    if (!isMoving || isStill) {
+      // V4: نقطة backup كل 30 دقيقة (بدلاً من 15)
+      if (timeDiff >= 1800000) { // 30 دقيقة
+        console.log(`[shouldSaveToHistory] Stopped > 30min (${Math.round(timeDiff/60000)}m) - backup point`);
+        return true;
+      }
+      console.log(`[shouldSaveToHistory] Stopped - skip (${Math.round(timeDiff/1000)}s < 1800s)`);
+      return false;
+    }
+
+    // 🚗 السائق يتحرك: احفظ كل 90 ثانية أو 50 متر
+    if (timeDiff >= 90000) {
+      console.log(`[shouldSaveToHistory] Moving (${Math.round(currentSpeed*3.6)} km/h) - 90s elapsed`);
+      return true;
+    }
+
+    if (distance >= 50) {
+      console.log(`[shouldSaveToHistory] Moving - moved ${Math.round(distance)}m`);
+      return true;
+    }
+
+    console.log(`[shouldSaveToHistory] Moving - skip (${Math.round(timeDiff/1000)}s, ${Math.round(distance)}m)`);
+    return false;
+
   } catch (error) {
     console.error('[shouldSaveToHistory] Error:', error);
-    // In case of error, save to be safe
-    return true;
+    return true; // safe default
   }
 };
 
@@ -112,13 +130,24 @@ const HeadlessTask = async (event) => {
         return;
       }
 
+      // ===== V4 QUALITY FILTERS (v2.6.0) =====
+      const speed = location.coords.speed ?? 0;
+      const accuracy = location.coords.accuracy ?? 999;
+      // 1) رفض النقاط الرديئة (accuracy > 50م)
+      if (accuracy > 50) {
+        console.warn(`[HeadlessTask] ❌ Rejected: poor accuracy (${accuracy.toFixed(0)}م > 50م)`);
+        return;
+      }
+      // 2) رفض السرعات الوهمية (>200 km/h)
+      const speedKmh = speed * 3.6;
+      if (speedKmh > 200) {
+        console.warn(`[HeadlessTask] ❌ Rejected: impossible speed (${speedKmh.toFixed(0)} km/h)`);
+        return;
+      }
+
       console.log('[HeadlessTask] Saving location for driver:', driverId);
 
       // ✅ v2.5.11: استخراج isMoving + activity + confidence (نفس LocationService.js)
-      // قبل: HeadlessTask يحفظ فقط lat/lng/speed - بدون isMoving أو currentActivity
-      // النتيجة: 99.99% من النقاط (background) كانت activity='unknown' في الويب
-      // الحل: نحفظ نفس المعلومات مثل onLocation حتى يظهر التصنيف الصحيح في الخريطة
-      const speed = location.coords.speed ?? 0;
       const isMoving = location.is_moving === true || speed >= 0.83; // 3 km/h
       const activity = (location.activity && location.activity.type) || 'unknown';
       const activityConfidence = (location.activity && location.activity.confidence) || 0;
@@ -177,11 +206,13 @@ const HeadlessTask = async (event) => {
             });
 
           // Update last save time and location in AsyncStorage
+          // V4: نحفظ isMoving عشان نقدر نكشف "تغيّر الحالة" في الاستدعاء التالي
           await AsyncStorage.setItem('lastHistorySaveTime', Date.now().toString());
           await AsyncStorage.setItem('lastHistorySaveLocation', JSON.stringify({
             latitude: location.coords.latitude,
             longitude: location.coords.longitude,
           }));
+          await AsyncStorage.setItem('lastHistoryIsMoving', String(isMoving));
 
           console.log('[HeadlessTask] Location saved to locationHistory');
         } catch (historyError) {
