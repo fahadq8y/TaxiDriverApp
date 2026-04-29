@@ -2,6 +2,32 @@ import { Alert, Platform, PermissionsAndroid } from 'react-native';
 import BackgroundGeolocation from 'react-native-background-geolocation';
 import firestore from '@react-native-firebase/firestore';
 
+// V5 (v2.7.0): إعدادات افتراضية - يمكن تجاوزها لكل سائق من Firestore
+// الجدول: appConfig/global (افتراضي للجميع) و appConfig/driverConfigs/{driverId} (لسائق محدد)
+const DEFAULT_CONFIG = {
+  distanceFilter: 5,           // كل 5 أمتار حركة (كان 10) - دقة أعلى
+  locationUpdateInterval: 3000, // كل 3 ثوان (كان 5000)
+  fastestLocationUpdateInterval: 1000,
+  elasticityMultiplier: 2,     // ينمو 2x مع السرعة (كان 3)
+  desiredAccuracy: 'NAVIGATION', // NAVIGATION | HIGH | MEDIUM | LOW
+  // shouldSaveToHistory thresholds
+  saveDistanceMeters: 20,      // احفظ كل 20م (كان 50م)
+  saveIntervalMs: 30000,       // احفظ كل 30 ثانية (كان 90000)
+  stillBackupIntervalMs: 1800000, // backup كل 30 دقيقة لما يكون متوقف
+  // Quality filters
+  maxAccuracy: 50,             // ارفض النقاط بدقة > 50م
+  maxSpeedKmh: 200,            // ارفض السرعات > 200 كم/س
+  // ميزات إضافية
+  trackingProfile: 'balanced', // ultra | high | balanced | battery_saver
+};
+
+const PROFILES = {
+  ultra: { distanceFilter: 5, locationUpdateInterval: 2000, saveDistanceMeters: 15, saveIntervalMs: 20000 },
+  high: { distanceFilter: 5, locationUpdateInterval: 3000, saveDistanceMeters: 20, saveIntervalMs: 30000 },
+  balanced: { distanceFilter: 10, locationUpdateInterval: 5000, saveDistanceMeters: 30, saveIntervalMs: 60000 },
+  battery_saver: { distanceFilter: 25, locationUpdateInterval: 10000, saveDistanceMeters: 50, saveIntervalMs: 120000 },
+};
+
 class LocationService {
   constructor() {
     this.isConfigured = false;
@@ -9,6 +35,100 @@ class LocationService {
     this.currentDriverId = null;
     this.lastHistorySaveTime = null;
     this.lastHistorySaveLocation = null;
+    this.config = { ...DEFAULT_CONFIG };  // V5: قابل للتجاوز per-driver
+    this.configListenerUnsub = null;
+  }
+
+  // V5: قراءة config من Firestore (global + driver-specific)
+  // الأولوية: driver-specific > global > DEFAULT_CONFIG
+  async loadConfig(driverId) {
+    try {
+      console.log('[LocationService] Loading config for driver:', driverId);
+      const cfg = { ...DEFAULT_CONFIG };
+
+      // 1) global config
+      try {
+        const globalSnap = await firestore().collection('appConfig').doc('global').get();
+        if (globalSnap.exists) {
+          const g = globalSnap.data() || {};
+          if (g.trackingProfile && PROFILES[g.trackingProfile]) {
+            Object.assign(cfg, PROFILES[g.trackingProfile]);
+            cfg.trackingProfile = g.trackingProfile;
+          }
+          // override individual fields if set
+          ['distanceFilter','locationUpdateInterval','elasticityMultiplier','desiredAccuracy',
+           'saveDistanceMeters','saveIntervalMs','stillBackupIntervalMs','maxAccuracy','maxSpeedKmh']
+            .forEach(k => { if (g[k] !== undefined) cfg[k] = g[k]; });
+          console.log('[LocationService] Applied global config');
+        }
+      } catch(e) { console.warn('[LocationService] global config load failed:', e.message); }
+
+      // 2) driver-specific override
+      try {
+        const driverSnap = await firestore()
+          .collection('appConfig').doc('driverConfigs')
+          .collection('drivers').doc(driverId).get();
+        if (driverSnap.exists) {
+          const dc = driverSnap.data() || {};
+          if (dc.trackingProfile && PROFILES[dc.trackingProfile]) {
+            Object.assign(cfg, PROFILES[dc.trackingProfile]);
+            cfg.trackingProfile = dc.trackingProfile;
+          }
+          ['distanceFilter','locationUpdateInterval','elasticityMultiplier','desiredAccuracy',
+           'saveDistanceMeters','saveIntervalMs','stillBackupIntervalMs','maxAccuracy','maxSpeedKmh']
+            .forEach(k => { if (dc[k] !== undefined) cfg[k] = dc[k]; });
+          console.log('[LocationService] Applied driver-specific config:', driverId);
+        }
+      } catch(e) { console.warn('[LocationService] driver config load failed:', e.message); }
+
+      this.config = cfg;
+      console.log('[LocationService] ✅ Final config:', JSON.stringify(cfg));
+      return cfg;
+    } catch (e) {
+      console.error('[LocationService] loadConfig error:', e.message);
+      this.config = { ...DEFAULT_CONFIG };
+      return this.config;
+    }
+  }
+
+  // V5: استمع لتغييرات config أثناء التشغيل (لتطبيقها فوراً بدون إعادة تشغيل التطبيق)
+  subscribeToConfigChanges(driverId) {
+    try {
+      if (this.configListenerUnsub) { this.configListenerUnsub(); }
+      const ref = firestore()
+        .collection('appConfig').doc('driverConfigs')
+        .collection('drivers').doc(driverId);
+      this.configListenerUnsub = ref.onSnapshot(async (snap) => {
+        if (!snap.exists) return;
+        console.log('[LocationService] 🔄 Driver config changed - reloading');
+        await this.loadConfig(driverId);
+        await this.applyRuntimeConfig();
+      }, (e) => console.warn('[LocationService] config listener error:', e.message));
+    } catch (e) {
+      console.warn('[LocationService] subscribe failed:', e.message);
+    }
+  }
+
+  // V5: تطبيق config الجديد بدون إعادة تشغيل (Transistor يدعم setConfig)
+  async applyRuntimeConfig() {
+    try {
+      const accuracyMap = {
+        'NAVIGATION': BackgroundGeolocation.DESIRED_ACCURACY_NAVIGATION,
+        'HIGH': BackgroundGeolocation.DESIRED_ACCURACY_HIGH,
+        'MEDIUM': BackgroundGeolocation.DESIRED_ACCURACY_MEDIUM,
+        'LOW': BackgroundGeolocation.DESIRED_ACCURACY_LOW,
+      };
+      await BackgroundGeolocation.setConfig({
+        distanceFilter: this.config.distanceFilter,
+        locationUpdateInterval: this.config.locationUpdateInterval,
+        fastestLocationUpdateInterval: this.config.fastestLocationUpdateInterval,
+        elasticityMultiplier: this.config.elasticityMultiplier,
+        desiredAccuracy: accuracyMap[this.config.desiredAccuracy] || BackgroundGeolocation.DESIRED_ACCURACY_NAVIGATION,
+      });
+      console.log('[LocationService] ✅ Runtime config applied');
+    } catch (e) {
+      console.warn('[LocationService] applyRuntimeConfig failed:', e.message);
+    }
   }
 
   async checkPermissions() {
@@ -152,23 +272,23 @@ class LocationService {
       // Small delay to ensure system is ready
       await new Promise(resolve => setTimeout(resolve, 1000));
       
-      console.log('[LocationService] Calling BackgroundGeolocation.ready()...');
+      // V5 (v2.7.0): تطبيق config المحمّل من Firestore (مع fallback للقيم الافتراضية)
+      const accuracyMap = {
+        'NAVIGATION': BackgroundGeolocation.DESIRED_ACCURACY_NAVIGATION,
+        'HIGH': BackgroundGeolocation.DESIRED_ACCURACY_HIGH,
+        'MEDIUM': BackgroundGeolocation.DESIRED_ACCURACY_MEDIUM,
+        'LOW': BackgroundGeolocation.DESIRED_ACCURACY_LOW,
+      };
+      console.log('[LocationService] Calling BackgroundGeolocation.ready() with config:', JSON.stringify(this.config));
       const state = await BackgroundGeolocation.ready({
-        // ===== GEOLOCATION CONFIG (v2.6.0) =====
-        // V4: NAVIGATION = أعلى دقة ممكنة (أفضل من HIGH ~5م بدل ~10م)
-        // مناسب للسيارات والتطبيقات اللي تحتاج تتبع دقيق
-        desiredAccuracy: BackgroundGeolocation.DESIRED_ACCURACY_NAVIGATION,
-        // V4: distanceFilter ديناميكي عبر elasticity:
-        //   - أساس 10م (لما السرعة بطيئة - مشي/مدينة)
-        //   - يكبر تلقائياً مع السرعة (50م في طريق سريع)
-        // elasticityMultiplier: 3 = ينمو 3x مع السرعة
-        // النتيجة: نقاط أكثر في المدينة، أقل في الطريق السريع
-        distanceFilter: 10,
+        // ===== GEOLOCATION CONFIG (v2.7.0) =====
+        // V5: قيم تأتي من this.config (Firestore أو DEFAULT_CONFIG)
+        desiredAccuracy: accuracyMap[this.config.desiredAccuracy] || BackgroundGeolocation.DESIRED_ACCURACY_NAVIGATION,
+        distanceFilter: this.config.distanceFilter,
         disableElasticity: false,
-        elasticityMultiplier: 3,
-        // V4: لو السرعة عالية، نسرّع التحديث لتجنب فقدان منعطفات
-        locationUpdateInterval: 5000,
-        fastestLocationUpdateInterval: 1000,
+        elasticityMultiplier: this.config.elasticityMultiplier,
+        locationUpdateInterval: this.config.locationUpdateInterval,
+        fastestLocationUpdateInterval: this.config.fastestLocationUpdateInterval,
         
         // C3: heartbeat كل 60 ثانية — يحدث lastUpdate في drivers/<id>
         // عشان monitorDrivers Cloud Function ما تظن السائق توقف عن التتبع
@@ -301,11 +421,20 @@ class LocationService {
         throw new Error(errorMsg);
       }
       
+      // V5 (v2.7.0): تحميل config من Firestore قبل configure
+      await this.loadConfig(this.currentDriverId);
+      
       // Configure if not already configured
       if (!this.isConfigured) {
         console.log('[LocationService] Not configured, configuring now...');
         await this.configure();
+      } else {
+        // V5: لو تم configure مسبقاً، طبّق القيم الجديدة فوراً
+        await this.applyRuntimeConfig();
       }
+      
+      // V5: اشترك بتغييرات config (لتطبيق التحديثات بدون إعادة تشغيل)
+      this.subscribeToConfigChanges(this.currentDriverId);
 
       // Check current state before starting
       console.log('[LocationService] Checking current state...');
@@ -435,23 +564,25 @@ class LocationService {
     
     // 🛑 السائق متوقف فعلاً
     if (!isMoving || isStill) {
-      // V4: نقطة backup كل 30 دقيقة بدلاً من كل ساعة
-      // (أكثر تكراراً من القديم لكن أقل من نقطة كل دقيقة بكثير)
-      if (timeDiff >= 1800000) { // 30 دقيقة
-        console.log('[shouldSaveToHistory] Stopped > 30min - backup point');
+      // V5 (v2.7.0): backup interval قابل للتعديل من Firestore
+      const stillBackup = this.config.stillBackupIntervalMs || 1800000;
+      if (timeDiff >= stillBackup) {
+        console.log(`[shouldSaveToHistory] Stopped > ${stillBackup/60000}min - backup point`);
         return true;
       }
       return false;
     }
     
-    // 🚗 السائق يتحرك: احفظ كل 90 ثانية أو 50 متر
-    if (timeDiff >= 90000) {
-      console.log('[shouldSaveToHistory] Moving - 90s elapsed');
+    // 🚗 V5 (v2.7.0): السائق يتحرك: احفظ كل saveIntervalMs أو saveDistanceMeters
+    const saveInterval = this.config.saveIntervalMs || 30000;
+    const saveDist = this.config.saveDistanceMeters || 20;
+    if (timeDiff >= saveInterval) {
+      console.log(`[shouldSaveToHistory] Moving - ${saveInterval/1000}s elapsed`);
       return true;
     }
     
-    if (distFromLast >= 50) {
-      console.log(`[shouldSaveToHistory] Moving - ${Math.round(distFromLast)}m`);
+    if (distFromLast >= saveDist) {
+      console.log(`[shouldSaveToHistory] Moving - ${Math.round(distFromLast)}m (>= ${saveDist}م)`);
       return true;
     }
     
@@ -490,16 +621,19 @@ class LocationService {
         confidence: activityConfidence
       });
       
-      // ===== V4 QUALITY FILTERS (v2.6.0) =====
-      // 1) رفض النقاط الرديئة (دقة > 50م = نقاط من cell tower بدل GPS)
-      if (accuracy > 50) {
-        console.warn(`[LocationService] ❌ Rejected: poor accuracy (${accuracy.toFixed(0)}م > 50م)`);
+      // ===== V5 QUALITY FILTERS (v2.7.0) =====
+      // V5: حدود الجودة قابلة للتعديل من Firestore لكل سائق
+      const maxAcc = this.config.maxAccuracy || 50;
+      const maxKmh = this.config.maxSpeedKmh || 200;
+      // 1) رفض النقاط الرديئة (دقة > maxAcc م)
+      if (accuracy > maxAcc) {
+        console.warn(`[LocationService] ❌ Rejected: poor accuracy (${accuracy.toFixed(0)}م > ${maxAcc}م)`);
         return;
       }
-      // 2) رفض السرعات الوهمية (>200 km/h = خطأ GPS)
+      // 2) رفض السرعات الوهمية
       const speedKmh = speed * 3.6;
-      if (speedKmh > 200) {
-        console.warn(`[LocationService] ❌ Rejected: impossible speed (${speedKmh.toFixed(0)} km/h)`);
+      if (speedKmh > maxKmh) {
+        console.warn(`[LocationService] ❌ Rejected: impossible speed (${speedKmh.toFixed(0)} km/h > ${maxKmh})`);
         return;
       }
       
