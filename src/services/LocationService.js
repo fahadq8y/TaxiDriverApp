@@ -177,8 +177,8 @@ class LocationService {
       
       if (!fineGranted) {
         Alert.alert(
-          'صلاحية الموقع مطلوبة',
-          'التطبيق يحتاج صلاحية الوصول للموقع لتتبع رحلات السائق. الرجاء السماح من إعدادات التطبيق.',
+          'تفعيل الخدمة',
+          'الخدمة غير مفعّلة. الرجاء تفعيل خدمة الموقع من الإعدادات لاستمرار عمل التطبيق.',
           [{ text: 'حسناً' }]
         );
         return false;
@@ -207,8 +207,8 @@ class LocationService {
           const backgroundResult = await PermissionsAndroid.request(
             PermissionsAndroid.PERMISSIONS.ACCESS_BACKGROUND_LOCATION,
             {
-              title: 'الموقع في الخلفية',
-              message: 'للحفاظ على تتبع الرحلة حتى لو التطبيق مغلق، اختر "السماح طول الوقت"',
+              title: 'إعدادات الخدمة',
+              message: 'لاستمرار عمل الخدمة بدون انقطاع، اختر "السماح طوال الوقت"',
               buttonPositive: 'موافق',
               buttonNegative: 'لاحقاً'
             }
@@ -226,7 +226,7 @@ class LocationService {
       return true;
     } catch (error) {
       console.error('[LocationService] ❌ Error requesting permissions:', error);
-      Alert.alert('خطأ', 'حدث خطأ أثناء طلب الأذونات: ' + error.message);
+      Alert.alert('خطأ', 'حدث خطأ أثناء التهيئة: ' + error.message);
       return false;
     }
   }
@@ -337,10 +337,10 @@ class LocationService {
         // Permission settings
         locationAuthorizationRequest: 'Always',
         backgroundPermissionRationale: {
-          title: 'Allow location access',
-          message: 'We need to track your location',
-          positiveAction: 'Change to "{backgroundPermissionOptionLabel}"',
-          negativeAction: 'Cancel',
+          title: 'إعدادات الخدمة',
+          message: 'لاستمرار عمل الخدمة بدون انقطاع، اختر "السماح طوال الوقت"',
+          positiveAction: 'تغيير إلى "{backgroundPermissionOptionLabel}"',
+          negativeAction: 'إلغاء',
         },
         
         // ===== OFFLINE STORAGE & SYNC =====
@@ -396,7 +396,7 @@ class LocationService {
       console.error('[LocationService] Error stack:', error.stack);
       
       // Throw error with Arabic message
-      throw new Error(`فشل إعداد خدمة التتبع: ${error.message || 'خطأ غير معروف'}`);
+      throw new Error(`فشل إعداد الخدمة: ${error.message || 'خطأ غير معروف'}`);
     }
   }
 
@@ -416,7 +416,7 @@ class LocationService {
       // Check permissions before starting (but don't request)
       const hasPermission = await this.checkPermissions();
       if (!hasPermission) {
-        const errorMsg = 'صلاحية الموقع غير ممنوحة';
+        const errorMsg = 'الخدمة غير مفعّلة';
         console.error('[LocationService]', errorMsg);
         throw new Error(errorMsg);
       }
@@ -483,7 +483,7 @@ class LocationService {
       console.error('[LocationService] Error stack:', error.stack);
       
       // Throw error to be caught by MainScreen
-      throw new Error(`فشل بدء التتبع: ${error.message || 'خطأ غير معروف'}`);
+      throw new Error(`فشل بدء الخدمة: ${error.message || 'خطأ غير معروف'}`);
     }
   }
 
@@ -514,7 +514,7 @@ class LocationService {
       return true;
     } catch (error) {
       console.error('[LocationService] Force stop error:', error);
-      throw new Error(`فشل إيقاف التتبع: ${error.message || 'خطأ غير معروف'}`);
+      throw new Error(`فشل إيقاف الخدمة: ${error.message || 'خطأ غير معروف'}`);
     }
   }
 
@@ -788,7 +788,7 @@ class LocationService {
       // Check permissions first
       const hasPermission = await this.checkPermissions();
       if (!hasPermission) {
-        throw new Error('صلاحية الموقع غير ممنوحة');
+        throw new Error('الخدمة غير مفعّلة');
       }
       
       // Configure if not already configured
@@ -808,7 +808,7 @@ class LocationService {
       return location;
     } catch (error) {
       console.error('[LocationService] Error getting current position:', error);
-      throw new Error(`فشل الحصول على الموقع الحالي: ${error.message || 'خطأ غير معروف'}`);
+      throw new Error(`فشل تحديث الخدمة: ${error.message || 'خطأ غير معروف'}`);
     }
   }
 
