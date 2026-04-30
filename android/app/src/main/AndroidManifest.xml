@@ -56,15 +56,19 @@
           <!-- ===== FCM DEFAULT NOTIFICATION CHANNEL (v2.7.2) ===== -->
           <!-- قناة silent للـ wake-up messages من Cloud Functions -->
           <!-- تخترق Android FLAG_STOPPED state بدون إظهار شي للسائق -->
+          <!-- tools:replace لازم لـ override defaults من react-native-firebase/messaging -->
           <meta-data
               android:name="com.google.firebase.messaging.default_notification_channel_id"
-              android:value="silent_wake" />
+              android:value="silent_wake"
+              tools:replace="android:value" />
           <meta-data
               android:name="com.google.firebase.messaging.default_notification_icon"
-              android:resource="@mipmap/ic_launcher" />
+              android:resource="@mipmap/ic_launcher"
+              tools:replace="android:resource" />
           <meta-data
               android:name="com.google.firebase.messaging.default_notification_color"
-              android:resource="@android:color/transparent" />
+              android:resource="@android:color/transparent"
+              tools:replace="android:resource" />
 
         <!-- ===== MAIN ACTIVITY ===== -->
         <!-- ملاحظة: الـ MAIN/LAUNCHER intent-filter انتقل لـ MainActivityAlias عشان نقدر نخفي الأيقونة -->
