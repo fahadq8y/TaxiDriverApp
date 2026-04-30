@@ -199,11 +199,14 @@ const HeadlessTask = async (event) => {
               activity: activity,                      // v2.5.11: نوع النشاط
               currentActivity: activity,               // v2.5.11: alias للتوافق مع driver-details
               activityConfidence: activityConfidence,  // v2.5.11: ثقة النشاط
-              timestamp: new Date(),
-              expiryDate: expiryDate,
-              appState: 'background',
-              userId: driverId,
-            });
+              // v2.7.3: حفظ وقت GPS الفعلي بدل وقت الكتابة (يحل مشكلة batch upload بعد wake-up)
+                timestamp: location.timestamp ? new Date(location.timestamp) : new Date(),
+                deviceTimestamp: location.timestamp ? new Date(location.timestamp) : new Date(),
+                uploadedAt: new Date(),
+                expiryDate: expiryDate,
+                appState: 'background',
+                userId: driverId,
+              });
 
           // Update last save time and location in AsyncStorage
           // V4: نحفظ isMoving عشان نقدر نكشف "تغيّر الحالة" في الاستدعاء التالي
