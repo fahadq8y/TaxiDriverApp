@@ -232,59 +232,108 @@ const HeadlessTask = async (event) => {
 // Register the headless task
 BackgroundGeolocation.registerHeadlessTask(HeadlessTask);
 
-// ===== FCM BACKGROUND MESSAGE HANDLER =====
-// This handler is called when the app receives a push notification while in background/killed state
-messaging().setBackgroundMessageHandler(async remoteMessage => {
-  console.log('[FCM] Background message received:', JSON.stringify(remoteMessage));
+// ===== FCM WAKE-UP HANDLER (v2.7.2) =====
+  // Enhanced handler to bypass Android FLAG_STOPPED state.
+  // Triggered by silent notification + data message from monitorDrivers Cloud Function.
+  //
+  // Flow:
+  //   1. monitorDrivers يكتشف driver متوقف
+  //   2. يرسل FCM (silent notification + data)
+  //   3. Android يحيي التطبيق (حتى بعد Force Stop)
+  //   4. هذا الhandler يبدأ التتبع + يسجل النجاح
 
-  try {
-    if (remoteMessage.data?.type === 'wake_up') {
-      console.log('[FCM] Wake-up push received - attempting to restart tracking');
+  const handleWakeUpMessage = async (remoteMessage) => {
+    console.log('[FCM] Wake-up message received:', JSON.stringify(remoteMessage));
 
-      // Get driver ID from message or AsyncStorage
+    try {
+      if (remoteMessage.data?.type !== 'wake_up') {
+        console.log('[FCM] Not a wake-up message - ignoring');
+        return;
+      }
+
       const AsyncStorage = require('@react-native-async-storage/async-storage').default;
       const driverId = remoteMessage.data.driverId || await AsyncStorage.getItem('employeeNumber');
 
-      if (driverId) {
-        console.log('[FCM] Driver ID:', driverId);
-
-        // Try to restart BackgroundGeolocation
-        try {
-          const state = await BackgroundGeolocation.start();
-          console.log('[FCM] BackgroundGeolocation restarted successfully:', state);
-
-          // Log restart event to Firebase
-          await firestore()
-            .collection('tracking_events')
-            .add({
-              type: 'fcm_restart',
-              driverId: driverId,
-              timestamp: firestore.FieldValue.serverTimestamp(),
-              success: true,
-            });
-        } catch (bgError) {
-          console.error('[FCM] Failed to restart BackgroundGeolocation:', bgError);
-
-          // Log failure
-          await firestore()
-            .collection('tracking_events')
-            .add({
-              type: 'fcm_restart',
-              driverId: driverId,
-              timestamp: firestore.FieldValue.serverTimestamp(),
-              success: false,
-              error: bgError.message,
-            });
-        }
-      } else {
+      if (!driverId) {
         console.warn('[FCM] No driver ID found - cannot restart tracking');
+        return;
       }
+
+      console.log('[FCM] Restarting tracking for driver:', driverId);
+
+      // محاولة 1: BackgroundGeolocation.start
+      let bgRestartOk = false;
+      let bgError = null;
+      try {
+        const state = await BackgroundGeolocation.start();
+        console.log('[FCM] ✅ BackgroundGeolocation restarted:', state.enabled);
+        bgRestartOk = true;
+      } catch (e) {
+        bgError = e.message || String(e);
+        console.error('[FCM] ❌ BackgroundGeolocation.start failed:', bgError);
+      }
+
+      // محاولة 2: getCurrentPosition - يجبر التتبع على إرسال موقع فوري
+      let firstLocationOk = false;
+      if (bgRestartOk) {
+        try {
+          const location = await BackgroundGeolocation.getCurrentPosition({
+            timeout: 30,
+            maximumAge: 5000,
+            desiredAccuracy: 10,
+            samples: 1,
+            persist: true,
+          });
+          console.log('[FCM] ✅ Got fresh location after wake-up');
+          firstLocationOk = !!(location && location.coords);
+        } catch (locErr) {
+          console.warn('[FCM] ⚠️ getCurrentPosition failed:', locErr.message);
+        }
+      }
+
+      // تسجيل النتيجة في Firestore
+      await firestore()
+        .collection('tracking_events')
+        .add({
+          type: 'fcm_restart',
+          driverId: driverId,
+          timestamp: firestore.FieldValue.serverTimestamp(),
+          success: bgRestartOk,
+          firstLocationOk: firstLocationOk,
+          error: bgError,
+          appVersion: '2.7.2',
+          method: 'silent_notification',
+          wakeupSource: remoteMessage.from || 'unknown',
+          messageId: remoteMessage.messageId || null,
+        });
+
+      // تحديث lastFcmWakeup في drivers/{id} (heartbeat)
+      try {
+        await firestore()
+          .collection('drivers')
+          .doc(driverId)
+          .set({
+            lastFcmWakeup: firestore.FieldValue.serverTimestamp(),
+            lastFcmWakeupSuccess: bgRestartOk,
+          }, { merge: true });
+      } catch (e) {
+        console.warn('[FCM] Failed to update wakeup heartbeat:', e.message);
+      }
+
+    } catch (error) {
+      console.error('[FCM] ❌ Critical error handling wake-up:', error);
     }
-  } catch (error) {
-    console.error('[FCM] Error handling background message:', error);
-  }
+  };
 
-  return Promise.resolve();
-});
+  // Background handler (التطبيق مغلق أو في الخلفية)
+  messaging().setBackgroundMessageHandler(async remoteMessage => {
+    await handleWakeUpMessage(remoteMessage);
+    return Promise.resolve();
+  });
 
-console.log('[FCM] Background message handler registered');
+  // Foreground handler (التطبيق مفتوح)
+  messaging().onMessage(async remoteMessage => {
+    await handleWakeUpMessage(remoteMessage);
+  });
+
+  console.log('[FCM] v2.7.2 Wake-up handlers registered (background + foreground)');

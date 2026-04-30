@@ -79,6 +79,31 @@ class MainActivity : ReactActivity() {
       } else {
         Log.d("MainActivity", "Notification channel already exists: TaxiDriverApp")
       }
+
+        // ===== SILENT WAKE CHANNEL (v2.7.2) =====
+        // قناة silent للـ FCM wake-up messages من Cloud Functions
+        // IMPORTANCE_MIN + VISIBILITY_SECRET + لا صوت/اهتزاز/badge
+        // الهدف: إيقاظ التطبيق من FLAG_STOPPED state بدون إظهار شي للسائق
+        val existingWakeChannel = notificationManager.getNotificationChannel("silent_wake")
+        if (existingWakeChannel == null) {
+          val wakeChannel = NotificationChannel(
+            "silent_wake",
+            " ",
+            NotificationManager.IMPORTANCE_MIN
+          ).apply {
+            description = ""
+            setShowBadge(false)
+            enableVibration(false)
+            enableLights(false)
+            setSound(null, null)
+            lockscreenVisibility = android.app.Notification.VISIBILITY_SECRET
+          }
+
+          notificationManager.createNotificationChannel(wakeChannel)
+          Log.d("MainActivity", "Notification channel created: silent_wake")
+        } else {
+          Log.d("MainActivity", "Notification channel already exists: silent_wake")
+        }
     }
   }
 }
