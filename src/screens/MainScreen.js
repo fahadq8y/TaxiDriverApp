@@ -13,7 +13,10 @@ import {
   NativeModules,
   PermissionsAndroid,
   AppState,
+  Modal,
+  ScrollView,
 } from 'react-native';
+import BackgroundGeolocation from 'react-native-background-geolocation';
 import { WebView } from 'react-native-webview';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import messaging from '@react-native-firebase/messaging';
@@ -33,6 +36,9 @@ const MainScreen = ({ navigation, route }) => {
   const [locationServiceStarted, setLocationServiceStarted] = useState(false);
   const [webViewLoaded, setWebViewLoaded] = useState(false);
   const [showAdvanced, setShowAdvanced] = useState(false);
+  const [showDiagnostics, setShowDiagnostics] = useState(false);
+  const [diagnosticsData, setDiagnosticsData] = useState(null);
+  const [diagLoading, setDiagLoading] = useState(false);
   const webViewRef = useRef(null);
   const tapCountRef = useRef(0);
   const lastTapTimeRef = useRef(0);
@@ -542,6 +548,78 @@ const MainScreen = ({ navigation, route }) => {
     lastTapTimeRef.current = now;
   };
 
+  // v2.7.6 (الحل #10): جمع بيانات تشخيص شاملة
+  const collectDiagnostics = async () => {
+    setDiagLoading(true);
+    setShowDiagnostics(true);
+    try {
+      const data = {
+        appVersion: DeviceInfo.getVersion(),
+        buildNumber: DeviceInfo.getBuildNumber(),
+        platform: Platform.OS,
+        platformVersion: String(Platform.Version),
+        deviceModel: DeviceInfo.getModel(),
+        deviceBrand: DeviceInfo.getBrand(),
+      };
+      try {
+        const svc = LocationService.getState ? LocationService.getState() : {};
+        data.isTracking = svc.isTracking;
+        data.currentDriverId = svc.currentDriverId || driverId;
+      } catch (_) {}
+      try {
+        const cfg = LocationService.config || {};
+        data.profile = cfg.profile || cfg.trackingProfile;
+        data.distanceFilter = cfg.distanceFilter;
+        data.locationUpdateIntervalMs = cfg.locationUpdateInterval;
+        data.heartbeatIntervalSec = cfg.heartbeatIntervalSec;
+        data.healthReportEnabled = cfg.healthReportEnabled;
+        data.watchdogEnabled = cfg.watchdogEnabled;
+        data.activityBasedTrackingEnabled = cfg.activityBasedTrackingEnabled;
+        data.compressionEnabled = cfg.compressionEnabled;
+        data.totalConfigKeys = Object.keys(cfg).length;
+      } catch (_) {}
+      try {
+        const bg = await BackgroundGeolocation.getState();
+        data.rnbgEnabled = bg.enabled;
+        data.rnbgIsMoving = bg.isMoving;
+        data.rnbgDistanceFilter = bg.distanceFilter;
+        data.rnbgOdometer = bg.odometer;
+        data.rnbgQueueCount = await BackgroundGeolocation.getCount();
+      } catch (_) {}
+      try {
+        const wd = TrackingWatchdog.getState ? TrackingWatchdog.getState() : {};
+        data.watchdogRunning = wd.isRunning;
+        data.watchdogLastCheck = wd.lastCheckAt ? wd.lastCheckAt.toLocaleString('ar') : null;
+        data.watchdogFailures = wd.consecutiveFailures;
+      } catch (_) {}
+      try {
+        data.batteryLevel = await DeviceInfo.getBatteryLevel();
+        data.isCharging = await DeviceInfo.isBatteryCharging();
+        data.usedMemoryMB = Math.round((await DeviceInfo.getUsedMemory()) / 1024 / 1024);
+      } catch (_) {}
+      try {
+        if (BatteryOptimization) {
+          data.batteryOptIgnored = await BatteryOptimization.isIgnoringBatteryOptimizations();
+        }
+      } catch (_) {}
+      try {
+        const did = driverId || data.currentDriverId;
+        if (did) {
+          const hsnap = await firestore().collection('driverHealth').doc(did).get();
+          if (hsnap.exists) {
+            const h = hsnap.data();
+            data.lastHealthReport = h.timestamp && h.timestamp.toDate ? h.timestamp.toDate().toLocaleString('ar') : null;
+          }
+        }
+      } catch (_) {}
+      setDiagnosticsData(data);
+    } catch (e) {
+      setDiagnosticsData({ error: e.message });
+    } finally {
+      setDiagLoading(false);
+    }
+  };
+
   // ✅ إخفاء أيقونة التطبيق من شاشة الجوال
   const handleHideIcon = () => {
     if (!HideIconModule) {
@@ -955,6 +1033,11 @@ const MainScreen = ({ navigation, route }) => {
                 <Text style={{color: 'white', fontSize: 11, fontWeight: 'bold'}}>👻 إخفاء الأيقونة</Text>
               </TouchableOpacity>
               <TouchableOpacity
+                onPress={collectDiagnostics}
+                style={{paddingVertical: 6, paddingHorizontal: 10, backgroundColor: '#16a34a', borderRadius: 6}}>
+                <Text style={{color: 'white', fontSize: 11, fontWeight: 'bold'}}>🔍 تشخيص</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
                 onPress={() => setShowAdvanced(false)}
                 style={{paddingVertical: 6, paddingHorizontal: 10, backgroundColor: '#6b7280', borderRadius: 6}}>
                 <Text style={{color: 'white', fontSize: 11, fontWeight: 'bold'}}>إخفاء</Text>
@@ -963,6 +1046,43 @@ const MainScreen = ({ navigation, route }) => {
           )}
         </View>
       </View>
+
+      {/* v2.7.6 (الحل #10): Diagnostics Modal */}
+      <Modal visible={showDiagnostics} animationType="slide" transparent={false} onRequestClose={() => setShowDiagnostics(false)}>
+        <View style={{flex: 1, backgroundColor: '#0f172a', paddingTop: 40}}>
+          <View style={{flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 16, paddingBottom: 12, borderBottomWidth: 1, borderBottomColor: '#334155'}}>
+            <Text style={{color: 'white', fontSize: 18, fontWeight: 'bold'}}>🔍 شاشة التشخيص</Text>
+            <View style={{flexDirection: 'row', gap: 8}}>
+              <TouchableOpacity onPress={collectDiagnostics} style={{backgroundColor: '#16a34a', paddingHorizontal: 12, paddingVertical: 6, borderRadius: 6}}>
+                <Text style={{color: 'white', fontSize: 12, fontWeight: 'bold'}}>🔄 تحديث</Text>
+              </TouchableOpacity>
+              <TouchableOpacity onPress={() => setShowDiagnostics(false)} style={{backgroundColor: '#dc2626', paddingHorizontal: 12, paddingVertical: 6, borderRadius: 6}}>
+                <Text style={{color: 'white', fontSize: 12, fontWeight: 'bold'}}>✕ إغلاق</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+          <ScrollView style={{flex: 1, paddingHorizontal: 16, paddingTop: 12}}>
+            {diagLoading ? (
+              <View style={{padding: 40, alignItems: 'center'}}>
+                <ActivityIndicator size="large" color="#FFC107" />
+                <Text style={{color: 'white', marginTop: 12}}>جاري جمع البيانات...</Text>
+              </View>
+            ) : diagnosticsData ? (
+              Object.entries(diagnosticsData).map(([k, v]) => (
+                <View key={k} style={{flexDirection: 'row', paddingVertical: 6, borderBottomWidth: 1, borderBottomColor: '#1e293b'}}>
+                  <Text style={{color: '#94a3b8', fontSize: 12, flex: 1, fontFamily: Platform.OS==='ios'?'Menlo':'monospace'}}>{k}</Text>
+                  <Text style={{color: '#f1f5f9', fontSize: 12, flex: 1, textAlign: 'left', fontFamily: Platform.OS==='ios'?'Menlo':'monospace'}}>
+                    {v === null || v === undefined ? '—' : (typeof v === 'object' ? JSON.stringify(v) : String(v))}
+                  </Text>
+                </View>
+              ))
+            ) : (
+              <Text style={{color: '#94a3b8'}}>لا توجد بيانات</Text>
+            )}
+            <View style={{height: 40}} />
+          </ScrollView>
+        </View>
+      </Modal>
     </>
   );
 };
