@@ -842,7 +842,8 @@ class LocationService {
 
   /**
    * v2.7.8 (الحل #12): buffer points in AsyncStorage, flush as 1 doc to locationHistoryBatched
-   * Uses same shared keys as HeadlessTask (compressed_buffer / compressed_buffer_started_at)
+   * v2.7.9 (الإصلاح #1): مفاتيح AsyncStorage مربوطة بـ driverId لمنع أي تداخل
+   *   Keys: compressed_buffer_${driverId} / compressed_buffer_started_at_${driverId}
    */
   async _bufferAndFlushCompressed(point, expiryDate, appState) {
     try {
@@ -851,10 +852,19 @@ class LocationService {
       const pointsPerBatch = cfg.pointsPerCompressedBatch || 50;
       const maxBatchAgeSec = cfg.maxBatchAgeSec || 300;
 
-      const bufferRaw = await AsyncStorage.getItem('compressed_buffer');
+      // v2.7.9: مفاتيح خاصة بالسائق
+      const driverId = this.currentDriverId;
+      if (!driverId) {
+        console.warn('[Compress] no currentDriverId — skip buffering');
+        return;
+      }
+      const bufKey = `compressed_buffer_${driverId}`;
+      const startKey = `compressed_buffer_started_at_${driverId}`;
+
+      const bufferRaw = await AsyncStorage.getItem(bufKey);
       let buffer = [];
       if (bufferRaw) { try { buffer = JSON.parse(bufferRaw); } catch (_) { buffer = []; } }
-      let startedAt = parseInt(await AsyncStorage.getItem('compressed_buffer_started_at') || '0', 10);
+      let startedAt = parseInt(await AsyncStorage.getItem(startKey) || '0', 10);
       if (buffer.length === 0) startedAt = Date.now();
 
       buffer.push(point);
@@ -890,13 +900,13 @@ class LocationService {
           appState: appState || 'active',
         });
 
-        console.log('[Compress] ✅ Flushed batch of', buffer.length, 'points');
-        await AsyncStorage.setItem('compressed_buffer', '[]');
-        await AsyncStorage.setItem('compressed_buffer_started_at', '0');
+        console.log('[Compress] ✅ Flushed batch of', buffer.length, 'points for driver', driverId);
+        await AsyncStorage.setItem(bufKey, '[]');
+        await AsyncStorage.setItem(startKey, '0');
       } else {
-        await AsyncStorage.setItem('compressed_buffer', JSON.stringify(buffer));
-        await AsyncStorage.setItem('compressed_buffer_started_at', String(startedAt));
-        console.log('[Compress] buffered', buffer.length, '/', pointsPerBatch);
+        await AsyncStorage.setItem(bufKey, JSON.stringify(buffer));
+        await AsyncStorage.setItem(startKey, String(startedAt));
+        console.log('[Compress] buffered', buffer.length, '/', pointsPerBatch, 'for', driverId);
       }
     } catch (e) {
       console.error('[Compress] error:', e.message);
