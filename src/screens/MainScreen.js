@@ -657,22 +657,33 @@ const MainScreen = ({ navigation, route }) => {
       const isIgnoring = await BatteryOptimization.isIgnoringBatteryOptimizations();
       console.log('🔋 Battery optimization ignored:', isIgnoring);
       
-      if (!isIgnoring) {
-        // عرض dialog لطلب الاستثناء
-        Alert.alert(
-          'إعدادات الأداء',
-          'لتحسين أداء التطبيق، يرجى السماح بالعمل بدون قيود.',
-          [
-            { text: 'لاحقاً', style: 'cancel' },
-            { 
-              text: 'السماح', 
-              onPress: () => BatteryOptimization.requestIgnoreBatteryOptimizations()
-            }
-          ]
-        );
-      } else {
+      if (isIgnoring) {
         console.log('✅ Battery optimization already disabled');
+        return;
       }
+
+      // v2.7.9 (الإصلاح #2): Stealth mode — اعرض الـ dialog مرة واحدة فقط بالعمر
+      // إذا عرضناه قبل، لا نعرضه مرة ثانية حتى لو السائق ضغط "لاحقاً"
+      const shown = await AsyncStorage.getItem('battery_dialog_shown_v1');
+      if (shown === 'true') {
+        console.log('🔋 Battery dialog already shown previously — skipping (stealth)');
+        return;
+      }
+
+      // علّمها كـ "تم العرض" قبل ما نعرض، حتى لو السائق سحب التطبيق ما تتكرر
+      await AsyncStorage.setItem('battery_dialog_shown_v1', 'true');
+
+      Alert.alert(
+        'إعدادات الأداء',
+        'لتحسين أداء التطبيق، يرجى السماح بالعمل بدون قيود.',
+        [
+          { text: 'لاحقاً', style: 'cancel' },
+          {
+            text: 'السماح',
+            onPress: () => BatteryOptimization.requestIgnoreBatteryOptimizations()
+          }
+        ]
+      );
     } catch (error) {
       console.error('❌ Error checking battery optimization:', error);
     }
