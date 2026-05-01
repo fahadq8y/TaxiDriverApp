@@ -20,11 +20,38 @@
     return admin.firestore.Timestamp.fromMillis(Date.now() + TTL_DAYS * 24 * 60 * 60 * 1000);
   }
 
-  // Threshold: السائق يعتبر "متوقف" إذا ما أرسل موقع لمدة (دقائق)
-  const STALE_THRESHOLD_MINUTES = 5;
+  // Threshold: السائق يعتبر "متوقف" إذا ما أرسل موقع لمدة (دقائق)  [قابل للتعديل من appConfig/global]
+  const DEFAULT_STALE_THRESHOLD_MINUTES = 5;
 
-  // أي سائق آخر تحديث له أكبر من هذا الحد يعتبر "مهجور" (نتجاهله)
-  const ABANDONED_THRESHOLD_HOURS = 48;
+  // أي سائق آخر تحديث له أكبر من هذا الحد يعتبر "مهجور" (نتجاهله)  [قابل للتعديل من appConfig/global]
+  const DEFAULT_ABANDONED_THRESHOLD_HOURS = 48;
+
+  // v2.7.8 (الحل #3): قراءة إعدادات FCM من appConfig/global
+  // المفاتيح:
+  //   fcmPingMode: 'stale' | 'aggressive' | 'off'   (default 'stale')
+  //   fcmPingIntervalMin: throttle aggressive mode (default 5 دقائق لكل سائق)
+  //   fcmStaleThresholdMin: override (default 5)
+  //   fcmAbandonedThresholdHours: override (default 48)
+  async function loadFcmConfig() {
+    try {
+      const snap = await db.collection('appConfig').doc('global').get();
+      const data = snap.exists ? snap.data() : {};
+      return {
+        mode: data.fcmPingMode || 'stale',
+        intervalMin: parseInt(data.fcmPingIntervalMin, 10) || 5,
+        staleThresholdMin: parseInt(data.fcmStaleThresholdMin, 10) || DEFAULT_STALE_THRESHOLD_MINUTES,
+        abandonedThresholdHours: parseInt(data.fcmAbandonedThresholdHours, 10) || DEFAULT_ABANDONED_THRESHOLD_HOURS,
+      };
+    } catch (e) {
+      console.warn('loadFcmConfig failed, using defaults:', e.message);
+      return {
+        mode: 'stale',
+        intervalMin: 5,
+        staleThresholdMin: DEFAULT_STALE_THRESHOLD_MINUTES,
+        abandonedThresholdHours: DEFAULT_ABANDONED_THRESHOLD_HOURS,
+      };
+    }
+  }
 
   // أكواد أخطاء FCM التي تعني أن الـ token غير صالح
   const INVALID_TOKEN_ERRORS = new Set([
@@ -41,11 +68,19 @@
     .timeZone('Asia/Kuwait')
     .onRun(async (context) => {
       try {
-        console.log('🔍 Starting driver monitoring (v2.7.2)...');
+        // v2.7.8 (الحل #3): قراءة إعدادات FCM من appConfig/global
+        const fcmCfg = await loadFcmConfig();
+        console.log(`🔍 monitorDrivers (v2.7.8) — mode=${fcmCfg.mode}, stale=${fcmCfg.staleThresholdMin}m, interval=${fcmCfg.intervalMin}m`);
+
+        if (fcmCfg.mode === 'off') {
+          console.log('🛑 FCM ping mode = off — skipping all FCM pings');
+          return null;
+        }
 
         const now = Date.now();
-        const staleThreshold = now - (STALE_THRESHOLD_MINUTES * 60 * 1000);
-        const abandonedThreshold = now - (ABANDONED_THRESHOLD_HOURS * 60 * 60 * 1000);
+        const staleThreshold = now - (fcmCfg.staleThresholdMin * 60 * 1000);
+        const abandonedThreshold = now - (fcmCfg.abandonedThresholdHours * 60 * 60 * 1000);
+        const pingThrottleThreshold = now - (fcmCfg.intervalMin * 60 * 1000);
 
         const driversSnapshot = await db.collection('drivers')
           .where('isActive', '==', true)
@@ -60,11 +95,14 @@
 
         const stoppedDrivers = [];
         const abandonedSkipped = [];
+        const aggressivePinged = [];
+        const aggressiveThrottled = [];
         const promises = [];
 
         driversSnapshot.forEach(doc => {
           const driver = doc.data();
           const lastUpdate = driver.lastUpdate?.toMillis() || 0;
+          const lastFcmPing = driver.lastFcmPingAt?.toMillis() || 0;
 
           // تجاهل السائقين المهجورين تماماً (توفير FCM credits)
           if (lastUpdate < abandonedThreshold) {
@@ -72,11 +110,12 @@
             return;
           }
 
-          // فحص: متوقف عن الإرسال > threshold
-          if (lastUpdate < staleThreshold) {
+          const isStale = lastUpdate < staleThreshold;
+
+          if (isStale) {
+            // STALE: دائماً يتم تنبيهه (في كل الأوضاع 'stale' و 'aggressive')
             const minutesAgo = Math.round((now - lastUpdate) / 60000);
             console.log(`⚠️ Driver ${doc.id} (${driver.name}) stopped - ${minutesAgo} min ago`);
-
             stoppedDrivers.push({
               id: doc.id,
               name: driver.name || 'غير معروف',
@@ -85,15 +124,42 @@
               lastUpdateTimestamp: lastUpdate,
               minutesAgo: minutesAgo,
             });
-
             if (driver.fcmToken) {
-              promises.push(sendWakeUpPush(doc.id, driver.fcmToken, driver.name));
+              promises.push(
+                sendWakeUpPush(doc.id, driver.fcmToken, driver.name)
+                  .then(() => db.collection('drivers').doc(doc.id).set({
+                    lastFcmPingAt: admin.firestore.FieldValue.serverTimestamp(),
+                    lastFcmPingReason: 'stale',
+                  }, { merge: true }))
+              );
+            }
+          } else if (fcmCfg.mode === 'aggressive') {
+            // AGGRESSIVE: ping السائقين النشطين أيضاً (ما عدا الـ throttled)
+            if (lastFcmPing > pingThrottleThreshold) {
+              aggressiveThrottled.push(doc.id);
+              return;
+            }
+            if (driver.fcmToken) {
+              aggressivePinged.push(doc.id);
+              promises.push(
+                sendWakeUpPush(doc.id, driver.fcmToken, driver.name)
+                  .then(() => db.collection('drivers').doc(doc.id).set({
+                    lastFcmPingAt: admin.firestore.FieldValue.serverTimestamp(),
+                    lastFcmPingReason: 'aggressive',
+                  }, { merge: true }))
+              );
             }
           }
         });
 
         if (abandonedSkipped.length > 0) {
           console.log(`🚫 Skipped ${abandonedSkipped.length} abandoned drivers: ${abandonedSkipped.join(', ')}`);
+        }
+        if (aggressivePinged.length > 0) {
+          console.log(`🚀 Aggressive ping → ${aggressivePinged.length} drivers: ${aggressivePinged.join(', ')}`);
+        }
+        if (aggressiveThrottled.length > 0) {
+          console.log(`⏳ Throttled (cooldown ${fcmCfg.intervalMin}m): ${aggressiveThrottled.length} drivers`);
         }
 
         if (promises.length > 0) {
@@ -109,7 +175,6 @@
             count: stoppedDrivers.length,
             expiresAt: expiresAt(),
           });
-
           console.log(`🚨 Alert created for ${stoppedDrivers.length} stopped drivers`);
         } else {
           console.log('✅ All drivers tracking normally');
