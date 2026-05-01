@@ -566,6 +566,9 @@ class LocationService {
       
       // Update driver status in Firestore
       await this.updateDriverStatus(true);
+
+      // v2.7.5 (الحل #8): شغل health monitoring
+      this.startHealthMonitoring();
       
       return true;
     } catch (error) {
@@ -821,6 +824,7 @@ class LocationService {
       const updateData = {
         lastUpdate: new Date(),
         isActive: true,
+        appVersion: APP_VERSION,
       };
       
       // إذا الـ heartbeat جاب موقع محدث، نحدثه أيضاً (بدون حفظ في history)
@@ -845,9 +849,112 @@ class LocationService {
         .set(updateData, { merge: true });
       
       console.log('[LocationService] Heartbeat ping saved');
+
+      // v2.7.5 (الحل #2): فرض رفع أي نقاط محلية متراكمة
+      if (this.config.forceSyncOnHeartbeat !== false) {
+        try {
+          const syncCount = await BackgroundGeolocation.getCount();
+          if (syncCount > 0) {
+            console.log('[LocationService] Heartbeat sync — uploading', syncCount, 'queued records');
+            await BackgroundGeolocation.sync();
+            console.log('[LocationService] ✅ Heartbeat sync complete');
+          }
+        } catch (syncErr) {
+          console.warn('[LocationService] Heartbeat sync failed:', syncErr.message);
+        }
+      }
     } catch (error) {
       console.error('[LocationService] Heartbeat error:', error);
       // لا نرمي الخطأ — heartbeat اختياري
+    }
+  }
+
+  // v2.7.5 (الحل #8): Health Monitoring — كل 5 دقائق
+  // يكتب في driverHealth/{driverId}: battery, network, queue, permissions, uptime
+  startHealthMonitoring() {
+    try {
+      if (this.config.healthReportEnabled === false) {
+        console.log('[LocationService] 🏥 Health monitoring disabled by config');
+        return;
+      }
+      if (this.healthInterval) clearInterval(this.healthInterval);
+      const intervalMs = (this.config.healthReportIntervalMin || 5) * 60 * 1000;
+      console.log('[LocationService] 🏥 Starting health monitoring every', intervalMs/1000, 's');
+      
+      // run once immediately
+      this.collectAndPushHealth().catch(e => console.warn('[Health] initial check failed:', e.message));
+      
+      this.healthInterval = setInterval(() => {
+        this.collectAndPushHealth().catch(e => console.warn('[Health] periodic check failed:', e.message));
+      }, intervalMs);
+    } catch (e) {
+      console.warn('[LocationService] startHealthMonitoring failed:', e.message);
+    }
+  }
+
+  stopHealthMonitoring() {
+    if (this.healthInterval) {
+      clearInterval(this.healthInterval);
+      this.healthInterval = null;
+      console.log('[LocationService] 🏥 Health monitoring stopped');
+    }
+  }
+
+  async collectAndPushHealth() {
+    if (!this.currentDriverId) return;
+    if (this.config.healthReportEnabled === false) return;
+    
+    const health = {
+      driverId: this.currentDriverId,
+      timestamp: firestore.FieldValue.serverTimestamp(),
+      appVersion: APP_VERSION,
+      platform: Platform.OS,
+      platformVersion: String(Platform.Version),
+    };
+
+    // Battery & device info
+    try {
+      const DeviceInfo = require('react-native-device-info').default;
+      health.batteryLevel = await DeviceInfo.getBatteryLevel(); // 0..1
+      health.isBatteryCharging = await DeviceInfo.isBatteryCharging();
+      health.powerState = await DeviceInfo.getPowerState();
+      health.deviceModel = DeviceInfo.getModel();
+      health.deviceBrand = DeviceInfo.getBrand();
+      health.systemVersion = DeviceInfo.getSystemVersion();
+      health.totalMemory = await DeviceInfo.getTotalMemory();
+      health.usedMemory = await DeviceInfo.getUsedMemory();
+      health.freeDiskStorage = await DeviceInfo.getFreeDiskStorage();
+      try { health.isLocationEnabled = await DeviceInfo.isLocationEnabled(); } catch(_){}
+      try { health.isAirplaneMode = await DeviceInfo.isAirplaneMode(); } catch(_){}
+    } catch (e) { health.deviceInfoError = e.message; }
+
+    // RNBG queue + state
+    try {
+      health.queueCount = await BackgroundGeolocation.getCount();
+      const state = await BackgroundGeolocation.getState();
+      health.rnbgEnabled = state.enabled;
+      health.rnbgIsMoving = state.isMoving;
+      health.rnbgTrackingMode = state.trackingMode;
+      health.rnbgOdometer = state.odometer;
+    } catch (e) { health.rnbgError = e.message; }
+
+    // Permissions
+    try {
+      const granted = await PermissionsAndroid.check(PermissionsAndroid.PERMISSIONS.ACCESS_FINE_LOCATION);
+      health.fineLocationPermission = granted;
+      const bgGranted = await PermissionsAndroid.check('android.permission.ACCESS_BACKGROUND_LOCATION').catch(() => null);
+      health.backgroundLocationPermission = bgGranted;
+    } catch (e) { health.permissionsError = e.message; }
+
+    // Service uptime
+    health.isTracking = this.isTracking;
+    health.activeProfile = this.config.profile || this.config.trackingProfile || 'unknown';
+
+    try {
+      await firestore().collection('driverHealth').doc(this.currentDriverId).set(health, { merge: true });
+      console.log('[Health] ✅ Pushed: batt=' + (health.batteryLevel*100|0) + '% queue=' + health.queueCount);
+    } catch (e) {
+      console.warn('[Health] write failed:', e.message);
     }
   }
 
