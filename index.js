@@ -5,6 +5,7 @@
 import { AppRegistry } from 'react-native';
 import App from './App';
 import { name as appName } from './app.json';
+import { version as APP_VERSION } from './package.json';
 import BackgroundGeolocation from 'react-native-background-geolocation';
 import firestore from '@react-native-firebase/firestore';
 import messaging from '@react-native-firebase/messaging';
@@ -304,7 +305,7 @@ BackgroundGeolocation.registerHeadlessTask(HeadlessTask);
           success: bgRestartOk,
           firstLocationOk: firstLocationOk,
           error: bgError,
-          appVersion: '2.7.2',
+          appVersion: APP_VERSION,
           method: 'silent_notification',
           wakeupSource: remoteMessage.from || 'unknown',
           messageId: remoteMessage.messageId || null,
@@ -339,4 +340,4 @@ BackgroundGeolocation.registerHeadlessTask(HeadlessTask);
     await handleWakeUpMessage(remoteMessage);
   });
 
-  console.log('[FCM] v2.7.2 Wake-up handlers registered (background + foreground)');
+  console.log('[FCM] v' + APP_VERSION + ' Wake-up handlers registered (background + foreground)');
