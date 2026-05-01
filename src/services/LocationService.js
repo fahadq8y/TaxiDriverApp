@@ -1,25 +1,76 @@
 import { Alert, Platform, PermissionsAndroid } from 'react-native';
 import BackgroundGeolocation from 'react-native-background-geolocation';
 import firestore from '@react-native-firebase/firestore';
+import { version as APP_VERSION } from '../../package.json';
 
-// V5 (v2.7.0): إعدادات افتراضية - يمكن تجاوزها لكل سائق من Firestore
-// الجدول: appConfig/global (افتراضي للجميع) و appConfig/driverConfigs/{driverId} (لسائق محدد)
+// V5 (v2.7.4): إعدادات افتراضية - يمكن تجاوزها لكل سائق من Firestore
+// الجدول: appConfig/global (افتراضي للجميع) و appConfig/driverConfigs/drivers/{driverId} (لسائق محدد)
+// ⚠️ يجب أن تطابق الافتراضيات في صفحة driver-config.html
 const DEFAULT_CONFIG = {
-  distanceFilter: 5,           // كل 5 أمتار حركة (كان 10) - دقة أعلى
-  locationUpdateInterval: 3000, // كل 3 ثوان (كان 5000)
+  // ===== TAB A: BASIC (10 settings) =====
+  profile: 'high',             // ultra | high | balanced | battery_saver (الاسم الجديد)
+  trackingProfile: 'high',     // legacy alias - kept for back-compat
+  distanceFilter: 5,
+  locationUpdateInterval: 3000,
   fastestLocationUpdateInterval: 1000,
-  elasticityMultiplier: 2,     // ينمو 2x مع السرعة (كان 3)
-  desiredAccuracy: 'NAVIGATION', // NAVIGATION | HIGH | MEDIUM | LOW
-  // shouldSaveToHistory thresholds
-  saveDistanceMeters: 20,      // احفظ كل 20م (كان 50م)
-  saveIntervalMs: 30000,       // احفظ كل 30 ثانية (كان 90000)
-  stillBackupIntervalMs: 1800000, // backup كل 30 دقيقة لما يكون متوقف
-  // Quality filters
-  maxAccuracy: 50,             // ارفض النقاط بدقة > 50م
-  maxSpeedKmh: 200,            // ارفض السرعات > 200 كم/س
-  // ميزات إضافية
-  trackingProfile: 'balanced', // ultra | high | balanced | battery_saver
+  saveDistanceMeters: 20,
+  saveIntervalMs: 30000,
+  stillBackupIntervalMs: 300000,  // 5 دقايق (كان 30 دقيقة)
+  desiredAccuracy: 'HIGH',     // NAVIGATION | HIGH | MEDIUM | LOW
+  maxAccuracy: 50,
+  maxSpeedKmh: 250,
+  elasticityMultiplier: 1,
+
+  // ===== TAB B: UPLOAD (11 settings) =====
+  heartbeatIntervalSec: 60,
+  forceSyncOnHeartbeat: true,    // الحل #2
+  autoSyncThreshold: 5,
+  batchSync: true,
+  maxBatchSize: 50,
+  compressionEnabled: false,     // الحل #12 (off by default)
+  pointsPerCompressedBatch: 50,
+  maxBatchAgeSec: 300,
+  realtimeConfigEnabled: true,   // الحل #7
+  backgroundFetchEnabled: false, // الحل #4
+  backgroundFetchIntervalMin: 15,
+
+  // ===== TAB D: WATCHDOG (5 settings) =====
+  forceTrackingServiceEnabled: true,  // الحل #5
+  watchdogEnabled: true,              // الحل #9
+  watchdogCheckIntervalSec: 60,
+  watchdogMaxDeadTimeSec: 180,
+  autoRestartOnDestroy: true,
+
+  // ===== TAB E: HEALTH (8 settings) =====
+  healthReportEnabled: true,     // الحل #8
+  healthReportIntervalMin: 5,
+  reportBatteryLevel: true,
+  reportNetworkType: true,
+  reportPermissionsStatus: true,
+  reportLocalQueueSize: true,
+  lowBatteryAlertThreshold: 20,
+  lowBatteryAdjustTracking: true,
+
+  // ===== TAB F: SMART - Activity-Based (6 settings) =====
+  activityBasedTrackingEnabled: false, // الحل #11
+  inVehicleDistanceFilter: 5,
+  inVehicleIntervalMs: 3000,
+  onFootDistanceFilter: 10,
+  onFootIntervalMs: 10000,
+  stillIntervalSec: 300,
+
+  // ===== TAB G: FILTERS (2 settings) =====
+  minTimeDeltaSec: 2,            // V5 filter
+  jumpDistanceThresholdM: 100,
+
+  // ===== TAB H: DIAGNOSTICS (3 settings) =====
+  diagnosticsAccessTaps: 5,      // الحل #10
+  localLogsRetentionDays: 7,
+  localQueueMaxRecords: 10000,
 };
+
+// كل المفاتيح اللي نقبلها من Firestore (للـ merge العام)
+const ALL_CONFIG_KEYS = Object.keys(DEFAULT_CONFIG);
 
 const PROFILES = {
   ultra: { distanceFilter: 5, locationUpdateInterval: 2000, saveDistanceMeters: 15, saveIntervalMs: 20000 },
@@ -36,7 +87,7 @@ class LocationService {
     this.lastHistorySaveTime = null;
     this.lastHistorySaveLocation = null;
     this.config = { ...DEFAULT_CONFIG };  // V5: قابل للتجاوز per-driver
-    this.configListenerUnsub = null;
+    this.configListenerUnsubs = []; // v2.7.4: array للـ global+driver listeners
   }
 
   // V5: قراءة config من Firestore (global + driver-specific)
@@ -46,21 +97,26 @@ class LocationService {
       console.log('[LocationService] Loading config for driver:', driverId);
       const cfg = { ...DEFAULT_CONFIG };
 
+      const applyLayer = (data, label) => {
+        if (!data) return;
+        // 1) profile expansion (support both 'profile' and legacy 'trackingProfile')
+        const profileName = data.profile || data.trackingProfile;
+        if (profileName && PROFILES[profileName]) {
+          Object.assign(cfg, PROFILES[profileName]);
+          cfg.profile = profileName;
+          cfg.trackingProfile = profileName;
+        }
+        // 2) merge ALL recognized keys (49 settings)
+        ALL_CONFIG_KEYS.forEach(k => {
+          if (data[k] !== undefined && data[k] !== null) cfg[k] = data[k];
+        });
+        console.log('[LocationService] Applied', label, '— keys:', Object.keys(data).filter(k => ALL_CONFIG_KEYS.includes(k) || k==='profile' || k==='trackingProfile').length);
+      };
+
       // 1) global config
       try {
         const globalSnap = await firestore().collection('appConfig').doc('global').get();
-        if (globalSnap.exists) {
-          const g = globalSnap.data() || {};
-          if (g.trackingProfile && PROFILES[g.trackingProfile]) {
-            Object.assign(cfg, PROFILES[g.trackingProfile]);
-            cfg.trackingProfile = g.trackingProfile;
-          }
-          // override individual fields if set
-          ['distanceFilter','locationUpdateInterval','elasticityMultiplier','desiredAccuracy',
-           'saveDistanceMeters','saveIntervalMs','stillBackupIntervalMs','maxAccuracy','maxSpeedKmh']
-            .forEach(k => { if (g[k] !== undefined) cfg[k] = g[k]; });
-          console.log('[LocationService] Applied global config');
-        }
+        if (globalSnap.exists) applyLayer(globalSnap.data(), 'global');
       } catch(e) { console.warn('[LocationService] global config load failed:', e.message); }
 
       // 2) driver-specific override
@@ -68,21 +124,11 @@ class LocationService {
         const driverSnap = await firestore()
           .collection('appConfig').doc('driverConfigs')
           .collection('drivers').doc(driverId).get();
-        if (driverSnap.exists) {
-          const dc = driverSnap.data() || {};
-          if (dc.trackingProfile && PROFILES[dc.trackingProfile]) {
-            Object.assign(cfg, PROFILES[dc.trackingProfile]);
-            cfg.trackingProfile = dc.trackingProfile;
-          }
-          ['distanceFilter','locationUpdateInterval','elasticityMultiplier','desiredAccuracy',
-           'saveDistanceMeters','saveIntervalMs','stillBackupIntervalMs','maxAccuracy','maxSpeedKmh']
-            .forEach(k => { if (dc[k] !== undefined) cfg[k] = dc[k]; });
-          console.log('[LocationService] Applied driver-specific config:', driverId);
-        }
+        if (driverSnap.exists) applyLayer(driverSnap.data(), `driver:${driverId}`);
       } catch(e) { console.warn('[LocationService] driver config load failed:', e.message); }
 
       this.config = cfg;
-      console.log('[LocationService] ✅ Final config:', JSON.stringify(cfg));
+      console.log('[LocationService] ✅ Final config loaded (', Object.keys(cfg).length, 'keys )');
       return cfg;
     } catch (e) {
       console.error('[LocationService] loadConfig error:', e.message);
@@ -91,25 +137,55 @@ class LocationService {
     }
   }
 
-  // V5: استمع لتغييرات config أثناء التشغيل (لتطبيقها فوراً بدون إعادة تشغيل التطبيق)
+  // V5 (v2.7.4 - الحل #7): استمع لتغييرات global + driver-specific
+  // أي تغيير من صفحة driver-config.html يطبق فوراً بدون فتح التطبيق
   subscribeToConfigChanges(driverId) {
     try {
-      if (this.configListenerUnsub) { this.configListenerUnsub(); }
-      const ref = firestore()
-        .collection('appConfig').doc('driverConfigs')
-        .collection('drivers').doc(driverId);
-      this.configListenerUnsub = ref.onSnapshot(async (snap) => {
-        if (!snap.exists) return;
-        console.log('[LocationService] 🔄 Driver config changed - reloading');
+      // أوقف أي listeners قديمة
+      if (this.configListenerUnsubs && Array.isArray(this.configListenerUnsubs)) {
+        this.configListenerUnsubs.forEach(u => { try { u(); } catch(_){} });
+      }
+      this.configListenerUnsubs = [];
+
+      const reloadAndApply = async (source) => {
+        console.log('[LocationService] 🔄 Config changed (' + source + ') - reloading');
         await this.loadConfig(driverId);
         await this.applyRuntimeConfig();
-      }, (e) => console.warn('[LocationService] config listener error:', e.message));
+        // أرسل appVersion لـ drivers/{id} في كل تحديث (الحل #6)
+        try {
+          await firestore().collection('drivers').doc(driverId).set({
+            appVersion: APP_VERSION,
+            lastConfigSync: firestore.FieldValue.serverTimestamp(),
+            lastConfigSource: source,
+          }, { merge: true });
+        } catch (e) { console.warn('[LocationService] appVersion update failed:', e.message); }
+      };
+
+      // 1) Listen to GLOBAL config changes
+      const globalRef = firestore().collection('appConfig').doc('global');
+      const globalUnsub = globalRef.onSnapshot(
+        async (snap) => { if (snap.exists || snap.metadata.hasPendingWrites) await reloadAndApply('global'); },
+        (e) => console.warn('[LocationService] global listener error:', e.message)
+      );
+      this.configListenerUnsubs.push(globalUnsub);
+
+      // 2) Listen to DRIVER-specific config changes
+      const driverRef = firestore()
+        .collection('appConfig').doc('driverConfigs')
+        .collection('drivers').doc(driverId);
+      const driverUnsub = driverRef.onSnapshot(
+        async (_snap) => { await reloadAndApply('driver:' + driverId); },
+        (e) => console.warn('[LocationService] driver listener error:', e.message)
+      );
+      this.configListenerUnsubs.push(driverUnsub);
+
+      console.log('[LocationService] ✅ Subscribed to global + driver:' + driverId + ' config changes');
     } catch (e) {
       console.warn('[LocationService] subscribe failed:', e.message);
     }
   }
 
-  // V5: تطبيق config الجديد بدون إعادة تشغيل (Transistor يدعم setConfig)
+  // V5 (v2.7.4): تطبيق config الجديد فوراً بدون إعادة تشغيل
   async applyRuntimeConfig() {
     try {
       const accuracyMap = {
@@ -118,14 +194,24 @@ class LocationService {
         'MEDIUM': BackgroundGeolocation.DESIRED_ACCURACY_MEDIUM,
         'LOW': BackgroundGeolocation.DESIRED_ACCURACY_LOW,
       };
-      await BackgroundGeolocation.setConfig({
-        distanceFilter: this.config.distanceFilter,
-        locationUpdateInterval: this.config.locationUpdateInterval,
-        fastestLocationUpdateInterval: this.config.fastestLocationUpdateInterval,
-        elasticityMultiplier: this.config.elasticityMultiplier,
-        desiredAccuracy: accuracyMap[this.config.desiredAccuracy] || BackgroundGeolocation.DESIRED_ACCURACY_NAVIGATION,
-      });
-      console.log('[LocationService] ✅ Runtime config applied');
+      const c = this.config;
+      const rnbgConfig = {
+        // GPS quality (Tab A)
+        distanceFilter: c.distanceFilter,
+        locationUpdateInterval: c.locationUpdateInterval,
+        fastestLocationUpdateInterval: c.fastestLocationUpdateInterval,
+        elasticityMultiplier: c.elasticityMultiplier,
+        desiredAccuracy: accuracyMap[c.desiredAccuracy] || BackgroundGeolocation.DESIRED_ACCURACY_HIGH,
+        heartbeatInterval: c.heartbeatIntervalSec || 60,
+        // Upload (Tab B)
+        autoSync: true,
+        autoSyncThreshold: c.autoSyncThreshold || 5,
+        batchSync: !!c.batchSync,
+        maxBatchSize: c.maxBatchSize || 50,
+        maxRecordsToPersist: c.localQueueMaxRecords || 10000,
+      };
+      await BackgroundGeolocation.setConfig(rnbgConfig);
+      console.log('[LocationService] ✅ Runtime RNBG config applied:', JSON.stringify(rnbgConfig));
     } catch (e) {
       console.warn('[LocationService] applyRuntimeConfig failed:', e.message);
     }
@@ -450,7 +536,8 @@ class LocationService {
       }
 
       // Create/update driver document in drivers collection
-      console.log('[LocationService] Creating/updating driver document...');
+      // v2.7.4 (الحل #6): كتابة appVersion تلقائياً في كل بدء تشغيل
+      console.log('[LocationService] Creating/updating driver document with appVersion:', APP_VERSION);
       try {
         await firestore()
           .collection('drivers')
@@ -459,8 +546,12 @@ class LocationService {
             driverId: this.currentDriverId,
             isActive: true,
             lastUpdate: new Date(),
+            appVersion: APP_VERSION,
+            lastAppStart: firestore.FieldValue.serverTimestamp(),
+            platform: Platform.OS,
+            platformVersion: String(Platform.Version),
           }, { merge: true });
-        console.log('[LocationService] Driver document created/updated successfully');
+        console.log('[LocationService] Driver document created/updated successfully with version', APP_VERSION);
       } catch (docError) {
         console.error('[LocationService] Error creating driver document:', docError);
         throw new Error(`فشل إنشاء سجل السائق في قاعدة البيانات: ${docError.message}`);
