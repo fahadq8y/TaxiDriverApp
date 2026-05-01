@@ -8,18 +8,21 @@ import { version as APP_VERSION } from '../../package.json';
 // ⚠️ يجب أن تطابق الافتراضيات في صفحة driver-config.html
 const DEFAULT_CONFIG = {
   // ===== TAB A: BASIC (10 settings) =====
+  // v2.7.10 (Option A): الافتراضيات ترجع لقيم v2.4.2 — موثوقة مع الشاشة المقفلة
+  // RNBG يدير batching/elasticity تلقائياً لما القيم null (سلوك v2.4.2)
   profile: 'high',             // ultra | high | balanced | battery_saver (الاسم الجديد)
   trackingProfile: 'high',     // legacy alias - kept for back-compat
-  distanceFilter: 5,
-  locationUpdateInterval: 3000,
-  fastestLocationUpdateInterval: 1000,
-  saveDistanceMeters: 20,
-  saveIntervalMs: 30000,
-  stillBackupIntervalMs: 300000,  // 5 دقايق (كان 30 دقيقة)
+  distanceFilter: 30,                   // v2.4.2 baseline (كان 5 — كان يستهلك بطارية كثيرة)
+  locationUpdateInterval: null,         // null = let RNBG batch naturally (كان 3000)
+  fastestLocationUpdateInterval: null,  // null = let RNBG decide (كان 1000)
+  saveDistanceMeters: 50,               // v2.4.2-style (كان 20)
+  saveIntervalMs: 60000,                // v2.4.2-style (كان 30000)
+  stillBackupIntervalMs: 300000,  // 5 دقايق
   desiredAccuracy: 'HIGH',     // NAVIGATION | HIGH | MEDIUM | LOW
   maxAccuracy: 50,
   maxSpeedKmh: 250,
-  elasticityMultiplier: 1,
+  elasticityMultiplier: null,           // null = use RNBG smart adaptive (كان 1)
+  stopTimeout: 15,                      // v2.4.2 baseline (كان hardcoded 5 — يدخل stationary بسرعة)
 
   // ===== TAB B: UPLOAD (11 settings) =====
   heartbeatIntervalSec: 60,
@@ -72,11 +75,14 @@ const DEFAULT_CONFIG = {
 // كل المفاتيح اللي نقبلها من Firestore (للـ merge العام)
 const ALL_CONFIG_KEYS = Object.keys(DEFAULT_CONFIG);
 
+// v2.7.10 (Option A): البروفايلات
+// - 'high' الآن = v2.4.2-compatible (موثوق مع الشاشة المقفلة، لا قيود Doze)
+// - 'ultra' للتتبع العدواني فقط لما يكون الجهاز whitelisted من البطارية
 const PROFILES = {
-  ultra: { distanceFilter: 5, locationUpdateInterval: 2000, saveDistanceMeters: 15, saveIntervalMs: 20000 },
-  high: { distanceFilter: 5, locationUpdateInterval: 3000, saveDistanceMeters: 20, saveIntervalMs: 30000 },
-  balanced: { distanceFilter: 10, locationUpdateInterval: 5000, saveDistanceMeters: 30, saveIntervalMs: 60000 },
-  battery_saver: { distanceFilter: 25, locationUpdateInterval: 10000, saveDistanceMeters: 50, saveIntervalMs: 120000 },
+  ultra:         { distanceFilter: 5,   locationUpdateInterval: 2000, saveDistanceMeters: 15, saveIntervalMs: 20000 },
+  high:          { distanceFilter: 30,  locationUpdateInterval: null, saveDistanceMeters: 50, saveIntervalMs: 60000 },  // v2.4.2 baseline
+  balanced:      { distanceFilter: 50,  locationUpdateInterval: null, saveDistanceMeters: 75, saveIntervalMs: 120000 },
+  battery_saver: { distanceFilter: 100, locationUpdateInterval: null, saveDistanceMeters: 150, saveIntervalMs: 300000 },
 };
 
 class LocationService {
@@ -209,9 +215,6 @@ class LocationService {
       const rnbgConfig = {
         // GPS quality (Tab A)
         distanceFilter: c.distanceFilter,
-        locationUpdateInterval: c.locationUpdateInterval,
-        fastestLocationUpdateInterval: c.fastestLocationUpdateInterval,
-        elasticityMultiplier: c.elasticityMultiplier,
         desiredAccuracy: accuracyMap[c.desiredAccuracy] || BackgroundGeolocation.DESIRED_ACCURACY_HIGH,
         heartbeatInterval: c.heartbeatIntervalSec || 60,
         // Upload (Tab B)
@@ -221,6 +224,11 @@ class LocationService {
         maxBatchSize: c.maxBatchSize || 50,
         maxRecordsToPersist: c.localQueueMaxRecords || 10000,
       };
+      // v2.7.10 (Option A): فقط مرر القيم الصريحة. null = اترك RNBG يقرر (سلوك v2.4.2)
+      if (c.locationUpdateInterval != null) rnbgConfig.locationUpdateInterval = c.locationUpdateInterval;
+      if (c.fastestLocationUpdateInterval != null) rnbgConfig.fastestLocationUpdateInterval = c.fastestLocationUpdateInterval;
+      if (c.elasticityMultiplier != null) rnbgConfig.elasticityMultiplier = c.elasticityMultiplier;
+      if (c.stopTimeout != null) rnbgConfig.stopTimeout = c.stopTimeout;
       await BackgroundGeolocation.setConfig(rnbgConfig);
       console.log('[LocationService] ✅ Runtime RNBG config applied:', JSON.stringify(rnbgConfig));
     } catch (e) {
@@ -377,20 +385,17 @@ class LocationService {
         'LOW': BackgroundGeolocation.DESIRED_ACCURACY_LOW,
       };
       console.log('[LocationService] Calling BackgroundGeolocation.ready() with config:', JSON.stringify(this.config));
-      const state = await BackgroundGeolocation.ready({
-        // ===== GEOLOCATION CONFIG (v2.7.0) =====
-        // V5: قيم تأتي من this.config (Firestore أو DEFAULT_CONFIG)
-        desiredAccuracy: accuracyMap[this.config.desiredAccuracy] || BackgroundGeolocation.DESIRED_ACCURACY_NAVIGATION,
-        distanceFilter: this.config.distanceFilter,
-        disableElasticity: false,
-        elasticityMultiplier: this.config.elasticityMultiplier,
-        locationUpdateInterval: this.config.locationUpdateInterval,
-        fastestLocationUpdateInterval: this.config.fastestLocationUpdateInterval,
-        
-        // C3: heartbeat كل 60 ثانية — يحدث lastUpdate في drivers/<id>
-        // عشان monitorDrivers Cloud Function ما تظن السائق توقف عن التتبع
-        // (بدون كتابة جديدة في locationHistory — فقط ping خفيف)
-        heartbeatInterval: 60,
+
+      // v2.7.10 (Option A): بناء كائن config ديناميكي
+      // null = اترك RNBG يقرر (سلوك v2.4.2 الموثوق مع الشاشة المقفلة)
+      const c = this.config;
+      const readyConfig = {
+        // ===== GEOLOCATION CONFIG =====
+        desiredAccuracy: accuracyMap[c.desiredAccuracy] || BackgroundGeolocation.DESIRED_ACCURACY_HIGH,
+        distanceFilter: c.distanceFilter,
+
+        // heartbeat كل 60 ثانية — يحدث lastUpdate في drivers/<id>
+        heartbeatInterval: c.heartbeatIntervalSec || 60,
         
         // Application config
         debug: false, // Disable debug sounds - set to false to stop all sound effects
@@ -454,24 +459,20 @@ class LocationService {
         // ===== ACTIVITY RECOGNITION & SMART STOP DETECTION =====
         // V3 PRO: استغلال activity recognition من Google Play Services
         // (still / on_foot / on_bicycle / in_vehicle / running)
-        stopTimeout: 5,                       // اعتبر السائق متوقف بعد 5 دقائق من السكون
         stopDetectionDelay: 1,                // ابدأ تحليل التوقف بعد دقيقة واحدة من الثبات
-        disableStopDetection: false,          // فعل اكتشاف التوقف الذكي
-        disableMotionActivityUpdates: false,  // فعل activity recognition (driving/walking/still)
-        activityRecognitionInterval: 10000,   // افحص النشاط كل 10 ثوان
-        minimumActivityConfidence: 60,        // ثقة 60%+ لتغيير الحالة
-        
-        // ===== V4 STATIONARY GEOFENCE (v2.6.0) =====
-        // Transistor ينشئ تلقائياً geofence حول الموقع الحالي لما السائق يتوقف
-        // لما السائق يتحرك خارج هذا الـ geofence → يبدأ التتبع تلقائياً
-        // الفائدة: توفير بطارية كبير لما السائق نائم في المنزل
-        stationaryRadius: 50,                 // 50م حول نقطة التوقف (الافتراضي 25م)
-        
+
         // ===== MOTION DETECTION =====
         preventSuspend: true,                 // منع تعليق التطبيق
-        useSignificantChangesOnly: false,     // استخدم كل التحديثات
         pausesLocationUpdatesAutomatically: false, // ما توقف لما السائق ساكن (نتحكم بنفسنا)
-      });
+      };
+
+      // v2.7.10 (Option A): القيم الاختيارية — null = اترك RNBG يقرر (سلوك v2.4.2)
+      if (c.locationUpdateInterval != null) readyConfig.locationUpdateInterval = c.locationUpdateInterval;
+      if (c.fastestLocationUpdateInterval != null) readyConfig.fastestLocationUpdateInterval = c.fastestLocationUpdateInterval;
+      if (c.elasticityMultiplier != null) readyConfig.elasticityMultiplier = c.elasticityMultiplier;
+      readyConfig.stopTimeout = c.stopTimeout || 15;  // v2.4.2 baseline = 15 دقيقة
+
+      const state = await BackgroundGeolocation.ready(readyConfig);
 
       console.log('[LocationService] Configuration successful');
       console.log('[LocationService] BackgroundGeolocation state:', JSON.stringify(state));
