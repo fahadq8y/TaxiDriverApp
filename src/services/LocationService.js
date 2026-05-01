@@ -129,6 +129,17 @@ class LocationService {
 
       this.config = cfg;
       console.log('[LocationService] ✅ Final config loaded (', Object.keys(cfg).length, 'keys )');
+
+      // v2.7.8 (الحل #12): cache compression flags so HeadlessTask can read them
+      try {
+        const AsyncStorage = require('@react-native-async-storage/async-storage').default;
+        await AsyncStorage.multiSet([
+          ['rt_cfg_compressionEnabled', String(!!cfg.compressionEnabled)],
+          ['rt_cfg_pointsPerBatch', String(cfg.pointsPerCompressedBatch || 50)],
+          ['rt_cfg_maxBatchAgeSec', String(cfg.maxBatchAgeSec || 300)],
+        ]);
+      } catch (e) { console.warn('[LocationService] cfg cache write failed:', e.message); }
+
       return cfg;
     } catch (e) {
       console.error('[LocationService] loadConfig error:', e.message);
@@ -768,35 +779,54 @@ class LocationService {
       // 💾 حفظ في locationHistory فقط إذا الشروط موجودة
       if (this.shouldSaveToHistory(location)) {
         try {
-          // V3: تاريخ انتهاء = شهرين (60 يوم) - يطابق سياسة الاحتفاظ في cleanup script
           const expiryDate = new Date();
           expiryDate.setDate(expiryDate.getDate() + 60);
-          
-          await firestore()
-            .collection('locationHistory')
-            .add({
-              driverId: this.currentDriverId,
+
+          // v2.7.8 (الحل #12): compression branch
+          const compressionEnabled = !!(this.config && this.config.compressionEnabled);
+
+          if (compressionEnabled) {
+            // COMPRESSED: buffer + flush
+            await this._bufferAndFlushCompressed({
               latitude: location.coords.latitude,
               longitude: location.coords.longitude,
               accuracy: location.coords.accuracy || 0,
               speed: speed,
               heading: location.coords.heading || 0,
-              isMoving: isMoving,              // V3: مهم لحساب ساعات القيادة الحقيقية
-              activity: activity,              // V3: نوع النشاط
+              isMoving: isMoving,
+              activity: activity,
+              currentActivity: activity,
               activityConfidence: activityConfidence,
-              timestamp: new Date(),
-              expiryDate: expiryDate,          // V3: 30 يوم بدلاً من 60
-              appState: 'active',
-              userId: this.currentDriverId,
-            });
-          
+              timestamp: Date.now(),
+              deviceTimestamp: Date.now(),
+            }, expiryDate, 'active');
+          } else {
+            // LEGACY: 1 doc per point
+            await firestore()
+              .collection('locationHistory')
+              .add({
+                driverId: this.currentDriverId,
+                latitude: location.coords.latitude,
+                longitude: location.coords.longitude,
+                accuracy: location.coords.accuracy || 0,
+                speed: speed,
+                heading: location.coords.heading || 0,
+                isMoving: isMoving,
+                activity: activity,
+                activityConfidence: activityConfidence,
+                timestamp: new Date(),
+                expiryDate: expiryDate,
+                appState: 'active',
+                userId: this.currentDriverId,
+              });
+            console.log('[LocationService] History point saved (legacy)');
+          }
+
           this.lastHistorySaveTime = Date.now();
           this.lastHistorySaveLocation = {
             latitude: location.coords.latitude,
             longitude: location.coords.longitude,
           };
-          
-          console.log('[LocationService] History point saved');
         } catch (historyError) {
           console.error('[LocationService] Error saving to history:', historyError);
         }
@@ -808,6 +838,69 @@ class LocationService {
 
   onLocationError(error) {
     console.error('[LocationService] Location error:', error);
+  }
+
+  /**
+   * v2.7.8 (الحل #12): buffer points in AsyncStorage, flush as 1 doc to locationHistoryBatched
+   * Uses same shared keys as HeadlessTask (compressed_buffer / compressed_buffer_started_at)
+   */
+  async _bufferAndFlushCompressed(point, expiryDate, appState) {
+    try {
+      const AsyncStorage = require('@react-native-async-storage/async-storage').default;
+      const cfg = this.config || {};
+      const pointsPerBatch = cfg.pointsPerCompressedBatch || 50;
+      const maxBatchAgeSec = cfg.maxBatchAgeSec || 300;
+
+      const bufferRaw = await AsyncStorage.getItem('compressed_buffer');
+      let buffer = [];
+      if (bufferRaw) { try { buffer = JSON.parse(bufferRaw); } catch (_) { buffer = []; } }
+      let startedAt = parseInt(await AsyncStorage.getItem('compressed_buffer_started_at') || '0', 10);
+      if (buffer.length === 0) startedAt = Date.now();
+
+      buffer.push(point);
+      const ageSec = (Date.now() - startedAt) / 1000;
+      const shouldFlush = buffer.length >= pointsPerBatch || ageSec >= maxBatchAgeSec;
+
+      if (shouldFlush) {
+        const firstTs = buffer[0].timestamp;
+        const lastTs = buffer[buffer.length - 1].timestamp;
+        const minLat = Math.min(...buffer.map(p => p.latitude));
+        const maxLat = Math.max(...buffer.map(p => p.latitude));
+        const minLng = Math.min(...buffer.map(p => p.longitude));
+        const maxLng = Math.max(...buffer.map(p => p.longitude));
+        const avgSpeed = buffer.reduce((s, p) => s + (p.speed||0), 0) / buffer.length;
+        const maxSpeed = Math.max(...buffer.map(p => p.speed || 0));
+
+        await firestore().collection('locationHistoryBatched').add({
+          driverId: this.currentDriverId,
+          userId: this.currentDriverId,
+          format: 'batched_v1',
+          pointsCount: buffer.length,
+          startTimestamp: new Date(firstTs),
+          endTimestamp: new Date(lastTs),
+          durationSec: Math.round((lastTs - firstTs) / 1000),
+          bounds: { minLat, maxLat, minLng, maxLng },
+          avgSpeed: avgSpeed,
+          maxSpeed: maxSpeed,
+          firstLocation: { latitude: buffer[0].latitude, longitude: buffer[0].longitude },
+          lastLocation: { latitude: buffer[buffer.length-1].latitude, longitude: buffer[buffer.length-1].longitude },
+          points: buffer,
+          uploadedAt: new Date(),
+          expiryDate: expiryDate,
+          appState: appState || 'active',
+        });
+
+        console.log('[Compress] ✅ Flushed batch of', buffer.length, 'points');
+        await AsyncStorage.setItem('compressed_buffer', '[]');
+        await AsyncStorage.setItem('compressed_buffer_started_at', '0');
+      } else {
+        await AsyncStorage.setItem('compressed_buffer', JSON.stringify(buffer));
+        await AsyncStorage.setItem('compressed_buffer_started_at', String(startedAt));
+        console.log('[Compress] buffered', buffer.length, '/', pointsPerBatch);
+      }
+    } catch (e) {
+      console.error('[Compress] error:', e.message);
+    }
   }
   
   /**
