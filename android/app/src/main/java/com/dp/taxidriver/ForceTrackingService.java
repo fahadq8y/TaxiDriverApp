@@ -33,6 +33,13 @@ public class ForceTrackingService extends Service {
     private static final String KEY_LAST_HEARTBEAT = "lastHeartbeat";
     private static final String KEY_HEARTBEAT_COUNT = "heartbeatCount";
 
+    // v2.7.9 (الإصلاح #3): backoff لمنع حلقة restart المتكررة
+    private static final String KEY_LAST_RESTART_AT = "lastRestartAt";
+    private static final String KEY_RESTART_COUNT = "restartCount";
+    private static final long RESTART_BACKOFF_MS = 30_000;        // 30 ثانية تأخير بين كل restart
+    private static final long RESTART_WINDOW_MS = 5 * 60_000;     // نافذة 5 دقائق
+    private static final int MAX_RESTARTS_IN_WINDOW = 5;          // حد أقصى 5 restart في 5 دقائق
+
     private Handler selfCheckHandler;
     private Runnable selfCheckRunnable;
 
@@ -142,15 +149,55 @@ public class ForceTrackingService extends Service {
     @Override
     public void onDestroy() {
         super.onDestroy();
-        Log.d(TAG, "onDestroy - Service destroyed, restarting...");
         stopSelfCheckLoop();
 
-        // إعادة تشغيل الخدمة فوراً (حزام أمان)
-        Intent restartIntent = new Intent(this, ForceTrackingService.class);
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            startForegroundService(restartIntent);
-        } else {
-            startService(restartIntent);
+        // v2.7.9 (الإصلاح #3): backoff قبل إعادة التشغيل لمنع حلقة restart-storm
+        // 1) لو في 5 restart خلال 5 دقايق → نوقف ونخلي START_STICKY يتولاها
+        // 2) خلاف ذلك، نأخر 30 ثانية قبل إعادة التشغيل
+        try {
+            android.content.SharedPreferences prefs = getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE);
+            long now = System.currentTimeMillis();
+            long lastRestart = prefs.getLong(KEY_LAST_RESTART_AT, 0);
+            int restartCount = prefs.getInt(KEY_RESTART_COUNT, 0);
+
+            // إعادة ضبط العداد لو طلعنا من النافذة
+            if (now - lastRestart > RESTART_WINDOW_MS) {
+                restartCount = 0;
+            }
+
+            if (restartCount >= MAX_RESTARTS_IN_WINDOW) {
+                Log.w(TAG, "onDestroy - too many restarts (" + restartCount + "/" + MAX_RESTARTS_IN_WINDOW
+                        + " in " + (RESTART_WINDOW_MS/1000) + "s) — relying on START_STICKY only");
+                return; // لا تعيد التشغيل يدوياً، خلي النظام يعيدها
+            }
+
+            prefs.edit()
+                .putLong(KEY_LAST_RESTART_AT, now)
+                .putInt(KEY_RESTART_COUNT, restartCount + 1)
+                .apply();
+
+            Log.d(TAG, "onDestroy - scheduling restart in " + (RESTART_BACKOFF_MS/1000) + "s (count="
+                    + (restartCount + 1) + "/" + MAX_RESTARTS_IN_WINDOW + ")");
+
+            final Context appCtx = getApplicationContext();
+            new Handler(Looper.getMainLooper()).postDelayed(new Runnable() {
+                @Override
+                public void run() {
+                    try {
+                        Intent restartIntent = new Intent(appCtx, ForceTrackingService.class);
+                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                            appCtx.startForegroundService(restartIntent);
+                        } else {
+                            appCtx.startService(restartIntent);
+                        }
+                        Log.d(TAG, "delayed restart fired");
+                    } catch (Exception e) {
+                        Log.e(TAG, "delayed restart failed: " + e.getMessage());
+                    }
+                }
+            }, RESTART_BACKOFF_MS);
+        } catch (Exception e) {
+            Log.e(TAG, "onDestroy backoff logic failed: " + e.getMessage());
         }
     }
 
