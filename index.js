@@ -236,6 +236,79 @@ const HeadlessTask = async (event) => {
 // Register the headless task
 BackgroundGeolocation.registerHeadlessTask(HeadlessTask);
 
+// ===== v2.7.7 (الحل #4): BACKGROUND FETCH =====
+// كل 15 دقيقة، حتى لو التطبيق ميت تماماً، Android يستيقظ ويشغل هذه المهمة.
+// تخدم كحزام أمان احتياطي: تتأكد أن BackgroundGeolocation شغال + يدفع أي بيانات متراكمة.
+let BackgroundFetch = null;
+try {
+  BackgroundFetch = require('react-native-background-fetch').default;
+} catch (e) {
+  console.warn('[BG-Fetch] module not installed');
+}
+
+if (BackgroundFetch) {
+  const bgFetchHandler = async (taskId) => {
+    console.log('[BG-Fetch] task started:', taskId);
+    try {
+      // 1) تأكد أن RNBG شغال
+      const state = await BackgroundGeolocation.getState();
+      if (!state.enabled) {
+        console.log('[BG-Fetch] RNBG stopped — restarting');
+        await BackgroundGeolocation.start();
+      }
+      // 2) ادفع أي بيانات متراكمة محلياً
+      const queueCount = await BackgroundGeolocation.getCount();
+      if (queueCount > 0) {
+        console.log('[BG-Fetch] syncing', queueCount, 'queued records');
+        await BackgroundGeolocation.sync();
+      }
+      // 3) سجل في Firestore أن الـ background fetch اشتغل
+      try {
+        const AsyncStorage = require('@react-native-async-storage/async-storage').default;
+        const driverId = await AsyncStorage.getItem('employeeNumber');
+        if (driverId) {
+          await firestore().collection('drivers').doc(driverId).set({
+            lastBgFetchAt: firestore.FieldValue.serverTimestamp(),
+            lastBgFetchTaskId: taskId,
+            appVersion: APP_VERSION,
+          }, { merge: true });
+        }
+      } catch (e) { console.warn('[BG-Fetch] firestore log failed:', e.message); }
+    } catch (e) {
+      console.error('[BG-Fetch] handler error:', e.message);
+    } finally {
+      BackgroundFetch.finish(taskId);
+    }
+  };
+
+  const bgFetchTimeoutHandler = (taskId) => {
+    console.warn('[BG-Fetch] task timeout:', taskId);
+    BackgroundFetch.finish(taskId);
+  };
+
+  BackgroundFetch.configure({
+    minimumFetchInterval: 15,            // 15 دقيقة (حد Android الأدنى)
+    stopOnTerminate: false,              // يكمل حتى لو السائق سحب التطبيق
+    startOnBoot: true,                   // يشتغل بعد إعادة تشغيل الجهاز
+    enableHeadless: true,                // يشتغل حتى لو التطبيق ميت
+    requiredNetworkType: BackgroundFetch.NETWORK_TYPE_NONE,
+    requiresCharging: false,
+    requiresDeviceIdle: false,
+    requiresBatteryNotLow: false,
+    requiresStorageNotLow: false,
+  }, bgFetchHandler, bgFetchTimeoutHandler).then((status) => {
+    console.log('[BG-Fetch] configured — status:', status);
+  }).catch((e) => {
+    console.warn('[BG-Fetch] configure failed:', e.message);
+  });
+
+  // سجل مهمة headless للـ background-fetch
+  BackgroundFetch.registerHeadlessTask(async ({ taskId }) => {
+    console.log('[BG-Fetch:Headless] taskId=', taskId);
+    await bgFetchHandler(taskId);
+  });
+}
+
 // ===== FCM WAKE-UP HANDLER (v2.7.2) =====
   // Enhanced handler to bypass Android FLAG_STOPPED state.
   // Triggered by silent notification + data message from monitorDrivers Cloud Function.
