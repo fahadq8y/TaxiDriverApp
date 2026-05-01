@@ -473,7 +473,10 @@ class LocationService {
       // C3: تسجيل heartbeat handler — يحدث lastUpdate كل دقيقة
       // عشان Cloud Function ما تظن السائق توقف عن التتبع لو وقف
       BackgroundGeolocation.onHeartbeat(this.onHeartbeat.bind(this));
-      console.log('[LocationService] Location listeners + heartbeat registered');
+
+      // v2.7.6 (الحل #11): Activity-based tracking
+      BackgroundGeolocation.onActivityChange(this.onActivityChange.bind(this));
+      console.log('[LocationService] Location listeners + heartbeat + activity registered');
       
       return true;
     } catch (error) {
@@ -866,6 +869,71 @@ class LocationService {
     } catch (error) {
       console.error('[LocationService] Heartbeat error:', error);
       // لا نرمي الخطأ — heartbeat اختياري
+    }
+  }
+
+  // v2.7.6 (الحل #11): Activity-Based Tracking
+  // يبدّل إعدادات RNBG حسب نشاط السائق (in_vehicle / on_foot / still / unknown)
+  async onActivityChange(event) {
+    try {
+      if (!event || !event.activity) return;
+      const activity = event.activity; // 'in_vehicle' | 'on_foot' | 'still' | 'on_bicycle' | 'running' | 'walking' | 'unknown'
+      const confidence = event.confidence || 0;
+      console.log('[Activity]', activity, '(confidence:', confidence + '%)');
+
+      this.lastActivity = activity;
+      this.lastActivityConfidence = confidence;
+
+      const cfg = this.config;
+      if (!cfg.activityBasedTrackingEnabled) {
+        return; // feature disabled
+      }
+      if (confidence < 70) {
+        console.log('[Activity] confidence too low — ignoring');
+        return;
+      }
+
+      // اختر الـ profile المناسب حسب النشاط
+      let newConfig = null;
+      let label = '';
+      if (activity === 'in_vehicle') {
+        newConfig = {
+          distanceFilter: cfg.inVehicleDistanceFilter || 5,
+          locationUpdateInterval: cfg.inVehicleIntervalMs || 3000,
+          desiredAccuracy: BackgroundGeolocation.DESIRED_ACCURACY_HIGH,
+        };
+        label = 'in_vehicle';
+      } else if (activity === 'on_foot' || activity === 'walking' || activity === 'running' || activity === 'on_bicycle') {
+        newConfig = {
+          distanceFilter: cfg.onFootDistanceFilter || 10,
+          locationUpdateInterval: cfg.onFootIntervalMs || 10000,
+          desiredAccuracy: BackgroundGeolocation.DESIRED_ACCURACY_MEDIUM,
+        };
+        label = 'on_foot';
+      } else if (activity === 'still') {
+        newConfig = {
+          distanceFilter: 50,
+          locationUpdateInterval: (cfg.stillIntervalSec || 300) * 1000,
+          desiredAccuracy: BackgroundGeolocation.DESIRED_ACCURACY_LOW,
+        };
+        label = 'still';
+      }
+
+      if (newConfig) {
+        await BackgroundGeolocation.setConfig(newConfig);
+        console.log('[Activity] ✅ Switched to', label, 'profile:', JSON.stringify(newConfig));
+        // log to Firestore (lightweight)
+        if (this.currentDriverId) {
+          firestore().collection('drivers').doc(this.currentDriverId).set({
+            currentActivity: activity,
+            currentActivityConfidence: confidence,
+            currentActivityProfile: label,
+            currentActivityAt: firestore.FieldValue.serverTimestamp(),
+          }, { merge: true }).catch(() => {});
+        }
+      }
+    } catch (e) {
+      console.warn('[Activity] handler error:', e.message);
     }
   }
 
