@@ -97,7 +97,10 @@
         const abandonedSkipped = [];
         const aggressivePinged = [];
         const aggressiveThrottled = [];
-        const promises = [];
+
+        // v2.7.9 (الإصلاح #4 + #5): اجمع المرشحين أولاً، بعدها نفّذهم بدفعات + transactions
+        // candidate = { id, fcmToken, name, reason ('stale'|'aggressive') }
+        const candidates = [];
 
         driversSnapshot.forEach(doc => {
           const driver = doc.data();
@@ -125,32 +128,67 @@
               minutesAgo: minutesAgo,
             });
             if (driver.fcmToken) {
-              promises.push(
-                sendWakeUpPush(doc.id, driver.fcmToken, driver.name)
-                  .then(() => db.collection('drivers').doc(doc.id).set({
-                    lastFcmPingAt: admin.firestore.FieldValue.serverTimestamp(),
-                    lastFcmPingReason: 'stale',
-                  }, { merge: true }))
-              );
+              candidates.push({ id: doc.id, fcmToken: driver.fcmToken, name: driver.name, reason: 'stale' });
             }
           } else if (fcmCfg.mode === 'aggressive') {
-            // AGGRESSIVE: ping السائقين النشطين أيضاً (ما عدا الـ throttled)
+            // AGGRESSIVE: pre-filter بالـ snapshot، الفحص النهائي راح يصير بـ transaction
             if (lastFcmPing > pingThrottleThreshold) {
               aggressiveThrottled.push(doc.id);
               return;
             }
             if (driver.fcmToken) {
-              aggressivePinged.push(doc.id);
-              promises.push(
-                sendWakeUpPush(doc.id, driver.fcmToken, driver.name)
-                  .then(() => db.collection('drivers').doc(doc.id).set({
-                    lastFcmPingAt: admin.firestore.FieldValue.serverTimestamp(),
-                    lastFcmPingReason: 'aggressive',
-                  }, { merge: true }))
-              );
+              candidates.push({ id: doc.id, fcmToken: driver.fcmToken, name: driver.name, reason: 'aggressive' });
             }
           }
         });
+
+        // v2.7.9 (الإصلاح #5): transaction-based throttle reserve لمنع double-ping عند تزامن الدوال
+        // - stale: نحجز ونرسل دائماً (ما يهم الـ throttle، السائق متوقف)
+        // - aggressive: نرفض إذا lastFcmPingAt حديث (نافذة pingThrottleThreshold)
+        async function reserveSlot(driverId, reason) {
+          const ref = db.collection('drivers').doc(driverId);
+          try {
+            return await db.runTransaction(async (tx) => {
+              const snap = await tx.get(ref);
+              if (!snap.exists) return false;
+              const data = snap.data();
+              const lastPing = data.lastFcmPingAt?.toMillis() || 0;
+
+              // aggressive: تأكد ما حد ثاني سبقنا
+              if (reason === 'aggressive' && lastPing > pingThrottleThreshold) {
+                return false; // racing instance حجز قبلنا
+              }
+
+              tx.update(ref, {
+                lastFcmPingAt: admin.firestore.FieldValue.serverTimestamp(),
+                lastFcmPingReason: reason,
+              });
+              return true;
+            });
+          } catch (e) {
+            console.warn(`reserveSlot(${driverId}) failed: ${e.message}`);
+            return false;
+          }
+        }
+
+        // v2.7.9 (الإصلاح #4): batching بحجم محدود لمنع طوفان FCM وتجاوز timeout
+        const BATCH_SIZE = 20;
+        for (let i = 0; i < candidates.length; i += BATCH_SIZE) {
+          const chunk = candidates.slice(i, i + BATCH_SIZE);
+          await Promise.all(chunk.map(async (c) => {
+            const reserved = await reserveSlot(c.id, c.reason);
+            if (!reserved) {
+              if (c.reason === 'aggressive') aggressiveThrottled.push(c.id);
+              return;
+            }
+            try {
+              await sendWakeUpPush(c.id, c.fcmToken, c.name);
+              if (c.reason === 'aggressive') aggressivePinged.push(c.id);
+            } catch (e) {
+              console.warn(`sendWakeUpPush(${c.id}) failed: ${e.message}`);
+            }
+          }));
+        }
 
         if (abandonedSkipped.length > 0) {
           console.log(`🚫 Skipped ${abandonedSkipped.length} abandoned drivers: ${abandonedSkipped.join(', ')}`);
@@ -160,10 +198,6 @@
         }
         if (aggressiveThrottled.length > 0) {
           console.log(`⏳ Throttled (cooldown ${fcmCfg.intervalMin}m): ${aggressiveThrottled.length} drivers`);
-        }
-
-        if (promises.length > 0) {
-          await Promise.all(promises);
         }
 
         if (stoppedDrivers.length > 0) {
