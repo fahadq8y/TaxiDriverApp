@@ -113,22 +113,26 @@ const shouldSaveToHistory = async (location) => {
 
 // Register Headless Task for background tracking when app is terminated
 // v2.7.8 (الحل #12): Data Compression — buffer points and flush as 1 doc
-// المفاتيح في AsyncStorage:
-//   compressed_buffer: JSON array of points
-//   compressed_buffer_started_at: timestamp of first point in buffer
+// v2.7.9 (الإصلاح #1): مفاتيح AsyncStorage مربوطة بـ driverId لمنع تداخل بين السائقين
+//   compressed_buffer_${driverId}: JSON array of points
+//   compressed_buffer_started_at_${driverId}: timestamp of first point
 async function bufferAndFlushCompressed(driverId, point, expiryDate) {
   try {
     const AsyncStorage = require('@react-native-async-storage/async-storage').default;
     const pointsPerBatch = parseInt(await AsyncStorage.getItem('rt_cfg_pointsPerBatch') || '50', 10);
     const maxBatchAgeSec = parseInt(await AsyncStorage.getItem('rt_cfg_maxBatchAgeSec') || '300', 10);
 
+    // v2.7.9: المفاتيح ربطناها بالرقم الوظيفي للسائق
+    const bufKey = `compressed_buffer_${driverId}`;
+    const startKey = `compressed_buffer_started_at_${driverId}`;
+
     // Read current buffer
-    const bufferRaw = await AsyncStorage.getItem('compressed_buffer');
+    const bufferRaw = await AsyncStorage.getItem(bufKey);
     let buffer = [];
     if (bufferRaw) {
       try { buffer = JSON.parse(bufferRaw); } catch (_) { buffer = []; }
     }
-    let startedAt = parseInt(await AsyncStorage.getItem('compressed_buffer_started_at') || '0', 10);
+    let startedAt = parseInt(await AsyncStorage.getItem(startKey) || '0', 10);
     if (buffer.length === 0) startedAt = Date.now();
 
     // Append new point
@@ -168,16 +172,16 @@ async function bufferAndFlushCompressed(driverId, point, expiryDate) {
         appState: 'background',
       });
 
-      console.log('[Compress] ✅ Flushed batch of', buffer.length, 'points (1 doc instead of', buffer.length, ')');
+      console.log('[Compress] ✅ Flushed batch of', buffer.length, 'points (1 doc instead of', buffer.length, ') for driver', driverId);
 
-      // Clear buffer
-      await AsyncStorage.setItem('compressed_buffer', '[]');
-      await AsyncStorage.setItem('compressed_buffer_started_at', '0');
+      // Clear buffer (مفاتيح خاصة بالسائق)
+      await AsyncStorage.setItem(bufKey, '[]');
+      await AsyncStorage.setItem(startKey, '0');
     } else {
       // Save buffer back
-      await AsyncStorage.setItem('compressed_buffer', JSON.stringify(buffer));
-      await AsyncStorage.setItem('compressed_buffer_started_at', String(startedAt));
-      console.log('[Compress] buffered point', buffer.length, '/', pointsPerBatch, '(', ageSec.toFixed(0), 's /', maxBatchAgeSec, 's)');
+      await AsyncStorage.setItem(bufKey, JSON.stringify(buffer));
+      await AsyncStorage.setItem(startKey, String(startedAt));
+      console.log('[Compress] buffered point', buffer.length, '/', pointsPerBatch, '(', ageSec.toFixed(0), 's /', maxBatchAgeSec, 's) for', driverId);
     }
   } catch (e) {
     console.error('[Compress] error:', e.message);
