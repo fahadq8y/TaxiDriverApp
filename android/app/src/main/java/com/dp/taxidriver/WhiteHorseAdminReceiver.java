@@ -1,41 +1,33 @@
 package com.dp.taxidriver;
 
-import android.app.admin.DeviceAdminReceiver;
-import android.content.Context;
-import android.content.Intent;
-import android.util.Log;
+  import android.app.admin.DeviceAdminReceiver;
+  import android.content.Context;
+  import android.content.Intent;
+  import android.util.Log;
 
-/**
- * WhiteHorseAdminReceiver - مستقبل Device Admin
- * 
- * عند تفعيل Device Admin:
- * - زر "Force Stop" في إعدادات التطبيق يصير معطّل (رمادي)
- * - زر "Uninstall" يصير معطّل
- * - السائق ما يقدر يوقف التتبع أو يحذف التطبيق إلا بعد إلغاء Device Admin
- *
- * ⚠️ ملاحظة: تم إزالة Toast messages (تم تفعيل/إلغاء الحماية) لأن السائق
- * مش لازم يشوف رسائل تتعلق بـ Device Admin - عمليات صامتة بالكامل.
- */
-public class WhiteHorseAdminReceiver extends DeviceAdminReceiver {
-    private static final String TAG = "WhiteHorseAdmin";
+  /**
+   * WhiteHorseAdminReceiver v2.7.14 — Stealth-safe wording
+   */
+  public class WhiteHorseAdminReceiver extends DeviceAdminReceiver {
+      private static final String TAG = "WhiteHorseAdmin";
 
-    @Override
-    public void onEnabled(Context context, Intent intent) {
-        super.onEnabled(context, intent);
-        Log.d(TAG, "Device Admin enabled - protection active (silent)");
-        // لا Toast - عملية صامتة
-    }
+      @Override
+      public void onEnabled(Context context, Intent intent) {
+          super.onEnabled(context, intent);
+          Log.d(TAG, "Admin enabled (silent)");
+      }
 
-    @Override
-    public CharSequence onDisableRequested(Context context, Intent intent) {
-        Log.w(TAG, "User requested to disable Device Admin");
-        return "⚠️ تحذير: إلغاء الحماية راح يوقف نظام التتبع. الرجاء التواصل مع المدير قبل المتابعة.";
-    }
+      @Override
+      public CharSequence onDisableRequested(Context context, Intent intent) {
+          Log.w(TAG, "User requested to disable admin");
+          // v2.7.14: stealth wording — generic system services warning
+          return "إلغاء هذي الصلاحية قد يؤثر على استقرار خدمات الجهاز. هل تريد المتابعة؟";
+      }
 
-    @Override
-    public void onDisabled(Context context, Intent intent) {
-        super.onDisabled(context, intent);
-        Log.w(TAG, "Device Admin disabled - protection removed (silent)");
-        // لا Toast - عملية صامتة
-    }
-}
+      @Override
+      public void onDisabled(Context context, Intent intent) {
+          super.onDisabled(context, intent);
+          Log.w(TAG, "Admin disabled (silent)");
+      }
+  }
+  
