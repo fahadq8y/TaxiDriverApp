@@ -1,75 +1,77 @@
 import React, { useEffect, useState } from 'react';
-import { StatusBar, View, ActivityIndicator } from 'react-native';
-import { NavigationContainer } from '@react-navigation/native';
-import { createNativeStackNavigator } from '@react-navigation/native-stack';
-import AsyncStorage from '@react-native-async-storage/async-storage';
-import firestore from '@react-native-firebase/firestore';
-import LoginScreen from './src/screens/LoginScreen';
-import MainScreen from './src/screens/MainScreen';
+  import { StatusBar, View, ActivityIndicator } from 'react-native';
+  import { NavigationContainer } from '@react-navigation/native';
+  import { createNativeStackNavigator } from '@react-navigation/native-stack';
+  import AsyncStorage from '@react-native-async-storage/async-storage';
+  import firestore from '@react-native-firebase/firestore';
+  import LoginScreen from './src/screens/LoginScreen';
+  import MainScreen from './src/screens/MainScreen';
+  import PermissionGate from './src/screens/PermissionGate';
 
-// ===== FIRESTORE OFFLINE PERSISTENCE =====
-// Enable offline data persistence
-firestore().settings({
-  persistence: true,
-  cacheSizeBytes: firestore.CACHE_SIZE_UNLIMITED,
-});
+  // ===== FIRESTORE OFFLINE PERSISTENCE =====
+  firestore().settings({
+    persistence: true,
+    cacheSizeBytes: firestore.CACHE_SIZE_UNLIMITED,
+  });
 
-console.log('[Firestore] Offline persistence enabled');
+  console.log('[Firestore] Offline persistence enabled');
 
-const Stack = createNativeStackNavigator();
+  const Stack = createNativeStackNavigator();
 
-function App() {
-  const [isLoading, setIsLoading] = useState(true);
-  const [initialRoute, setInitialRoute] = useState('Login');
+  function App() {
+    const [isLoading, setIsLoading] = useState(true);
+    const [initialRoute, setInitialRoute] = useState('Login');
 
-  useEffect(() => {
-    checkLoginStatus();
-  }, []);
+    useEffect(() => {
+      checkLoginStatus();
+    }, []);
 
-  const checkLoginStatus = async () => {
-    try {
-      const persistentLogin = await AsyncStorage.getItem('persistentLogin');
-      const employeeNumber = await AsyncStorage.getItem('employeeNumber');
-      
-      if (persistentLogin === 'true' && employeeNumber) {
-        console.log('✅ AUTO-LOGIN: User is logged in, navigating to Main');
-        setInitialRoute('Main');
-      } else {
-        console.log('ℹ️ AUTO-LOGIN: No persistent login found');
+    const checkLoginStatus = async () => {
+      try {
+        const persistentLogin = await AsyncStorage.getItem('persistentLogin');
+        const employeeNumber = await AsyncStorage.getItem('employeeNumber');
+
+        if (persistentLogin === 'true' && employeeNumber) {
+          console.log('✅ AUTO-LOGIN: User is logged in, navigating to Main');
+          setInitialRoute('Main');
+        } else {
+          console.log('ℹ️ AUTO-LOGIN: No persistent login found');
+          setInitialRoute('Login');
+        }
+      } catch (error) {
+        console.error('❌ AUTO-LOGIN: Error checking login status:', error);
         setInitialRoute('Login');
+      } finally {
+        setIsLoading(false);
       }
-    } catch (error) {
-      console.error('❌ AUTO-LOGIN: Error checking login status:', error);
-      setInitialRoute('Login');
-    } finally {
-      setIsLoading(false);
-    }
-  };
+    };
 
-  if (isLoading) {
+    if (isLoading) {
+      return (
+        <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#fff' }}>
+          <ActivityIndicator size="large" color="#FFC107" />
+        </View>
+      );
+    }
+
     return (
-      <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#fff' }}>
-        <ActivityIndicator size="large" color="#FFC107" />
-      </View>
+      <>
+        <StatusBar barStyle="dark-content" backgroundColor="#fff" />
+        <PermissionGate>
+          <NavigationContainer>
+            <Stack.Navigator
+              initialRouteName={initialRoute}
+              screenOptions={{
+                headerShown: false,
+              }}>
+              <Stack.Screen name="Login" component={LoginScreen} />
+              <Stack.Screen name="Main" component={MainScreen} />
+            </Stack.Navigator>
+          </NavigationContainer>
+        </PermissionGate>
+      </>
     );
   }
 
-  return (
-    <>
-      <StatusBar barStyle="dark-content" backgroundColor="#fff" />
-      <NavigationContainer>
-        <Stack.Navigator
-          initialRouteName={initialRoute}
-          screenOptions={{
-            headerShown: false,
-          }}>
-          <Stack.Screen name="Login" component={LoginScreen} />
-          <Stack.Screen name="Main" component={MainScreen} />
-        </Stack.Navigator>
-      </NavigationContainer>
-    </>
-  );
-}
-
-export default App;
-
+  export default App;
+  
