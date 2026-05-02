@@ -86,5 +86,41 @@ package com.taxidriverapp;
               e.printStackTrace();
           }
       }
+
+      // ===== v2.7.13: Notification Settings (يفتح صفحة Notifications مباشرة، مو App Info العامة) =====
+      @ReactMethod
+      public void openNotificationSettings() {
+          try {
+              Intent intent;
+              if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                  // Android 8+: فتح Notification Settings للتطبيق مباشرة
+                  intent = new Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS);
+                  intent.putExtra(Settings.EXTRA_APP_PACKAGE, reactContext.getPackageName());
+              } else {
+                  // Android < 8: fallback على App Info
+                  intent = new Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS);
+                  intent.setData(Uri.parse("package:" + reactContext.getPackageName()));
+              }
+              intent.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+              reactContext.startActivity(intent);
+          } catch (Exception e) {
+              e.printStackTrace();
+          }
+      }
+
+      // ===== v2.7.13: Location Permission Page (App Permissions screen) =====
+      // لـ Background Location على Android 11+ — أفضل من Linking.openSettings()
+      @ReactMethod
+      public void openLocationPermissionSettings() {
+          try {
+              // App Info → السائق يضغط Permissions → Location → "السماح طول الوقت"
+              Intent intent = new Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS);
+              intent.setData(Uri.parse("package:" + reactContext.getPackageName()));
+              intent.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+              reactContext.startActivity(intent);
+          } catch (Exception e) {
+              e.printStackTrace();
+          }
+      }
   }
   

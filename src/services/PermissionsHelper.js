@@ -1,8 +1,7 @@
 /**
-   * PermissionsHelper.js — v2.7.12
+   * PermissionsHelper.js — v2.7.13
    *
-   * أداة فحص وطلب الصلاحيات الـ 5 المطلوبة لتشغيل التطبيق.
-   * تستخدم PermissionsAndroid (built-in) + BatteryOptimization Native Module.
+   * كل دالة "request" تفتح الصفحة المحددة لتلك الصلاحية فقط.
    */
 
   import { PermissionsAndroid, NativeModules, Linking, Platform } from 'react-native';
@@ -20,7 +19,7 @@
 
   export async function checkPermission2_BackgroundLocation() {
     try {
-      if (Platform.Version < 29) return true; // Android < 10 لا يحتاج background permission منفصل
+      if (Platform.Version < 29) return true;
       return await PermissionsAndroid.check(PermissionsAndroid.PERMISSIONS.ACCESS_BACKGROUND_LOCATION);
     } catch (e) {
       return false;
@@ -38,7 +37,7 @@
 
   export async function checkPermission4_Notifications() {
     try {
-      if (Platform.Version < 33) return true; // Android < 13 لا يحتاج runtime permission للإشعارات
+      if (Platform.Version < 33) return true;
       return await PermissionsAndroid.check(PermissionsAndroid.PERMISSIONS.POST_NOTIFICATIONS);
     } catch (e) {
       return false;
@@ -55,6 +54,8 @@
   }
 
   // ===== طلب/فتح كل صلاحية =====
+
+  // صلاحية 1 — Fine Location: dialog النظام مباشرة
   export async function requestPermission1_Location() {
     try {
       await PermissionsAndroid.requestMultiple([
@@ -66,24 +67,33 @@
     }
   }
 
+  // صلاحية 2 — Background Location:
+  //   - Android 10: dialog النظام مباشرة (إذا Fine Location مفعّل)
+  //   - Android 11+: Google قيّدته → لازم المستخدم يدخل Settings يدوياً.
+  //     PermissionsAndroid.request يفتح App Info تلقائياً (Google design).
   export async function requestPermission2_BackgroundLocation() {
     try {
-      if (Platform.Version >= 30) {
-        // Android 11+: لازم يدخل الإعدادات يدوياً ويختار "السماح طول الوقت"
-        Linking.openSettings();
-      } else {
-        await PermissionsAndroid.request(
-          PermissionsAndroid.PERMISSIONS.ACCESS_BACKGROUND_LOCATION
-        );
+      // محاولة 1: PermissionsAndroid.request — يجرب dialog، إذا فشل يفتح Settings
+      const result = await PermissionsAndroid.request(
+        PermissionsAndroid.PERMISSIONS.ACCESS_BACKGROUND_LOCATION
+      );
+      // إذا ما في dialog (Android 11+) ومستخدم رفض/تجاهل → نفتح App Info صراحة
+      if (result !== PermissionsAndroid.RESULTS.GRANTED && BatteryOptimization?.openLocationPermissionSettings) {
+        BatteryOptimization.openLocationPermissionSettings();
       }
     } catch (e) {
-      Linking.openSettings();
+      if (BatteryOptimization?.openLocationPermissionSettings) {
+        BatteryOptimization.openLocationPermissionSettings();
+      } else {
+        Linking.openSettings();
+      }
     }
   }
 
+  // صلاحية 3 — Battery Optimization: dialog النظام مباشرة
   export function requestPermission3_Battery() {
     try {
-      if (BatteryOptimization && BatteryOptimization.requestIgnoreBatteryOptimizations) {
+      if (BatteryOptimization?.requestIgnoreBatteryOptimizations) {
         BatteryOptimization.requestIgnoreBatteryOptimizations();
       } else {
         Linking.openSettings();
@@ -93,21 +103,36 @@
     }
   }
 
+  // صلاحية 4 — Notifications:
+  //   - Android 13+: dialog النظام مباشرة
+  //   - Android < 13: يفتح Notification Settings للتطبيق مباشرة (مو App Info)
   export async function requestPermission4_Notifications() {
     try {
       if (Platform.Version >= 33) {
-        await PermissionsAndroid.request(PermissionsAndroid.PERMISSIONS.POST_NOTIFICATIONS);
+        const result = await PermissionsAndroid.request(
+          PermissionsAndroid.PERMISSIONS.POST_NOTIFICATIONS
+        );
+        if (result !== PermissionsAndroid.RESULTS.GRANTED && BatteryOptimization?.openNotificationSettings) {
+          BatteryOptimization.openNotificationSettings();
+        }
+      } else if (BatteryOptimization?.openNotificationSettings) {
+        BatteryOptimization.openNotificationSettings();
       } else {
         Linking.openSettings();
       }
     } catch (e) {
-      Linking.openSettings();
+      if (BatteryOptimization?.openNotificationSettings) {
+        BatteryOptimization.openNotificationSettings();
+      } else {
+        Linking.openSettings();
+      }
     }
   }
 
+  // صلاحية 5 — Display over apps: شاشة Overlay المحددة مباشرة
   export function requestPermission5_Overlay() {
     try {
-      if (BatteryOptimization && BatteryOptimization.requestOverlayPermission) {
+      if (BatteryOptimization?.requestOverlayPermission) {
         BatteryOptimization.requestOverlayPermission();
       } else {
         Linking.openSettings();
