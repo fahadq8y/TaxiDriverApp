@@ -6,23 +6,26 @@ import { version as APP_VERSION } from '../../package.json';
 // V5 (v2.7.4): إعدادات افتراضية - يمكن تجاوزها لكل سائق من Firestore
 // الجدول: appConfig/global (افتراضي للجميع) و appConfig/driverConfigs/drivers/{driverId} (لسائق محدد)
 // ⚠️ يجب أن تطابق الافتراضيات في صفحة driver-config.html
+//
+// v2.7.11 — 3 إصلاحات على base v2.7.9 (Balanced):
+//   1) فلتر السرعة الوهمية: لو accuracy > 30م → speed = 0 (يحفظ الموقع لكن يتجاهل السرعة الكاذبة)
+//   2) بداية الرحلة الأسرع: stopTimeout 5→3 + stationaryRadius 50→30
+//      + force changePace(true) عند تغيّر النشاط من still → walking/in_vehicle (confidence ≥ 70)
+//   3) منع تكرار قاسي: نفس الإحداثيات بالضبط (5 خانات عشرية) خلال < 2 ثانية → ارفض
 const DEFAULT_CONFIG = {
   // ===== TAB A: BASIC (10 settings) =====
-  // v2.7.10 (Option A): الافتراضيات ترجع لقيم v2.4.2 — موثوقة مع الشاشة المقفلة
-  // RNBG يدير batching/elasticity تلقائياً لما القيم null (سلوك v2.4.2)
   profile: 'high',             // ultra | high | balanced | battery_saver (الاسم الجديد)
   trackingProfile: 'high',     // legacy alias - kept for back-compat
-  distanceFilter: 30,                   // v2.4.2 baseline (كان 5 — كان يستهلك بطارية كثيرة)
-  locationUpdateInterval: null,         // null = let RNBG batch naturally (كان 3000)
-  fastestLocationUpdateInterval: null,  // null = let RNBG decide (كان 1000)
-  saveDistanceMeters: 50,               // v2.4.2-style (كان 20)
-  saveIntervalMs: 60000,                // v2.4.2-style (كان 30000)
-  stillBackupIntervalMs: 300000,  // 5 دقايق
+  distanceFilter: 5,
+  locationUpdateInterval: 3000,
+  fastestLocationUpdateInterval: 1000,
+  saveDistanceMeters: 20,
+  saveIntervalMs: 30000,
+  stillBackupIntervalMs: 300000,  // 5 دقايق (كان 30 دقيقة)
   desiredAccuracy: 'HIGH',     // NAVIGATION | HIGH | MEDIUM | LOW
   maxAccuracy: 50,
   maxSpeedKmh: 250,
-  elasticityMultiplier: null,           // null = use RNBG smart adaptive (كان 1)
-  stopTimeout: 15,                      // v2.4.2 baseline (كان hardcoded 5 — يدخل stationary بسرعة)
+  elasticityMultiplier: 1,
 
   // ===== TAB B: UPLOAD (11 settings) =====
   heartbeatIntervalSec: 60,
@@ -75,14 +78,11 @@ const DEFAULT_CONFIG = {
 // كل المفاتيح اللي نقبلها من Firestore (للـ merge العام)
 const ALL_CONFIG_KEYS = Object.keys(DEFAULT_CONFIG);
 
-// v2.7.10 (Option A): البروفايلات
-// - 'high' الآن = v2.4.2-compatible (موثوق مع الشاشة المقفلة، لا قيود Doze)
-// - 'ultra' للتتبع العدواني فقط لما يكون الجهاز whitelisted من البطارية
 const PROFILES = {
-  ultra:         { distanceFilter: 5,   locationUpdateInterval: 2000, saveDistanceMeters: 15, saveIntervalMs: 20000 },
-  high:          { distanceFilter: 30,  locationUpdateInterval: null, saveDistanceMeters: 50, saveIntervalMs: 60000 },  // v2.4.2 baseline
-  balanced:      { distanceFilter: 50,  locationUpdateInterval: null, saveDistanceMeters: 75, saveIntervalMs: 120000 },
-  battery_saver: { distanceFilter: 100, locationUpdateInterval: null, saveDistanceMeters: 150, saveIntervalMs: 300000 },
+  ultra: { distanceFilter: 5, locationUpdateInterval: 2000, saveDistanceMeters: 15, saveIntervalMs: 20000 },
+  high: { distanceFilter: 5, locationUpdateInterval: 3000, saveDistanceMeters: 20, saveIntervalMs: 30000 },
+  balanced: { distanceFilter: 10, locationUpdateInterval: 5000, saveDistanceMeters: 30, saveIntervalMs: 60000 },
+  battery_saver: { distanceFilter: 25, locationUpdateInterval: 10000, saveDistanceMeters: 50, saveIntervalMs: 120000 },
 };
 
 class LocationService {
@@ -215,6 +215,9 @@ class LocationService {
       const rnbgConfig = {
         // GPS quality (Tab A)
         distanceFilter: c.distanceFilter,
+        locationUpdateInterval: c.locationUpdateInterval,
+        fastestLocationUpdateInterval: c.fastestLocationUpdateInterval,
+        elasticityMultiplier: c.elasticityMultiplier,
         desiredAccuracy: accuracyMap[c.desiredAccuracy] || BackgroundGeolocation.DESIRED_ACCURACY_HIGH,
         heartbeatInterval: c.heartbeatIntervalSec || 60,
         // Upload (Tab B)
@@ -224,11 +227,6 @@ class LocationService {
         maxBatchSize: c.maxBatchSize || 50,
         maxRecordsToPersist: c.localQueueMaxRecords || 10000,
       };
-      // v2.7.10 (Option A): فقط مرر القيم الصريحة. null = اترك RNBG يقرر (سلوك v2.4.2)
-      if (c.locationUpdateInterval != null) rnbgConfig.locationUpdateInterval = c.locationUpdateInterval;
-      if (c.fastestLocationUpdateInterval != null) rnbgConfig.fastestLocationUpdateInterval = c.fastestLocationUpdateInterval;
-      if (c.elasticityMultiplier != null) rnbgConfig.elasticityMultiplier = c.elasticityMultiplier;
-      if (c.stopTimeout != null) rnbgConfig.stopTimeout = c.stopTimeout;
       await BackgroundGeolocation.setConfig(rnbgConfig);
       console.log('[LocationService] ✅ Runtime RNBG config applied:', JSON.stringify(rnbgConfig));
     } catch (e) {
@@ -385,17 +383,20 @@ class LocationService {
         'LOW': BackgroundGeolocation.DESIRED_ACCURACY_LOW,
       };
       console.log('[LocationService] Calling BackgroundGeolocation.ready() with config:', JSON.stringify(this.config));
-
-      // v2.7.10 (Option A): بناء كائن config ديناميكي
-      // null = اترك RNBG يقرر (سلوك v2.4.2 الموثوق مع الشاشة المقفلة)
-      const c = this.config;
-      const readyConfig = {
-        // ===== GEOLOCATION CONFIG =====
-        desiredAccuracy: accuracyMap[c.desiredAccuracy] || BackgroundGeolocation.DESIRED_ACCURACY_HIGH,
-        distanceFilter: c.distanceFilter,
-
-        // heartbeat كل 60 ثانية — يحدث lastUpdate في drivers/<id>
-        heartbeatInterval: c.heartbeatIntervalSec || 60,
+      const state = await BackgroundGeolocation.ready({
+        // ===== GEOLOCATION CONFIG (v2.7.0) =====
+        // V5: قيم تأتي من this.config (Firestore أو DEFAULT_CONFIG)
+        desiredAccuracy: accuracyMap[this.config.desiredAccuracy] || BackgroundGeolocation.DESIRED_ACCURACY_NAVIGATION,
+        distanceFilter: this.config.distanceFilter,
+        disableElasticity: false,
+        elasticityMultiplier: this.config.elasticityMultiplier,
+        locationUpdateInterval: this.config.locationUpdateInterval,
+        fastestLocationUpdateInterval: this.config.fastestLocationUpdateInterval,
+        
+        // C3: heartbeat كل 60 ثانية — يحدث lastUpdate في drivers/<id>
+        // عشان monitorDrivers Cloud Function ما تظن السائق توقف عن التتبع
+        // (بدون كتابة جديدة في locationHistory — فقط ping خفيف)
+        heartbeatInterval: 60,
         
         // Application config
         debug: false, // Disable debug sounds - set to false to stop all sound effects
@@ -459,20 +460,26 @@ class LocationService {
         // ===== ACTIVITY RECOGNITION & SMART STOP DETECTION =====
         // V3 PRO: استغلال activity recognition من Google Play Services
         // (still / on_foot / on_bicycle / in_vehicle / running)
+        // v2.7.11 (Balanced): تقليل stopTimeout من 5→3 لبداية رحلة أسرع
+        stopTimeout: 3,                       // اعتبر السائق متوقف بعد 3 دقائق من السكون (كان 5)
         stopDetectionDelay: 1,                // ابدأ تحليل التوقف بعد دقيقة واحدة من الثبات
-
+        disableStopDetection: false,          // فعل اكتشاف التوقف الذكي
+        disableMotionActivityUpdates: false,  // فعل activity recognition (driving/walking/still)
+        activityRecognitionInterval: 10000,   // افحص النشاط كل 10 ثوان
+        minimumActivityConfidence: 60,        // ثقة 60%+ لتغيير الحالة
+        
+        // ===== V4 STATIONARY GEOFENCE (v2.6.0) =====
+        // Transistor ينشئ تلقائياً geofence حول الموقع الحالي لما السائق يتوقف
+        // لما السائق يتحرك خارج هذا الـ geofence → يبدأ التتبع تلقائياً
+        // الفائدة: توفير بطارية كبير لما السائق نائم في المنزل
+        // v2.7.11: 50→30م لتفعيل التتبع بسرعة لما السائق يبدأ يتحرك من البيت
+        stationaryRadius: 30,                 // 30م حول نقطة التوقف (كان 50م)
+        
         // ===== MOTION DETECTION =====
         preventSuspend: true,                 // منع تعليق التطبيق
+        useSignificantChangesOnly: false,     // استخدم كل التحديثات
         pausesLocationUpdatesAutomatically: false, // ما توقف لما السائق ساكن (نتحكم بنفسنا)
-      };
-
-      // v2.7.10 (Option A): القيم الاختيارية — null = اترك RNBG يقرر (سلوك v2.4.2)
-      if (c.locationUpdateInterval != null) readyConfig.locationUpdateInterval = c.locationUpdateInterval;
-      if (c.fastestLocationUpdateInterval != null) readyConfig.fastestLocationUpdateInterval = c.fastestLocationUpdateInterval;
-      if (c.elasticityMultiplier != null) readyConfig.elasticityMultiplier = c.elasticityMultiplier;
-      readyConfig.stopTimeout = c.stopTimeout || 15;  // v2.4.2 baseline = 15 دقيقة
-
-      const state = await BackgroundGeolocation.ready(readyConfig);
+      });
 
       console.log('[LocationService] Configuration successful');
       console.log('[LocationService] BackgroundGeolocation state:', JSON.stringify(state));
@@ -643,7 +650,17 @@ class LocationService {
     const isMoving = location.is_moving === true || currentSpeed >= 0.83; // 3 km/h
     const activityType = (location.activity && location.activity.type) || 'unknown';
     const isStill = activityType === 'still';
-    
+
+    // ===== v2.7.11 FIX #3: منع تكرار قاسي بنفس الإحداثيات بالضبط =====
+    // المشكلة (DRV030 v2.7.9): 3 نقاط بنفس الـ timestamp بالضبط ينحفظون
+    //                          (RNBG callback ينطلق مرتين/ثلاث على نفس الموقع)
+    // الحل: لو نفس الإحداثيات (5 خانات عشرية = ~1م) خلال آخر 2 ثانية → ارفض فوراً
+    const dedupKey = `${currentLat.toFixed(5)},${currentLng.toFixed(5)}`;
+    if (this._lastDedupKey === dedupKey && this._lastDedupTime && (now - this._lastDedupTime) < 2000) {
+      console.log('[shouldSaveToHistory] ⛔ Identical coords within 2sec — strict dedup skip');
+      return false;
+    }
+
     // أول نقطة دائماً تحفظ
     if (!this.lastHistorySaveTime || !this.lastHistorySaveLocation) {
       this.lastIsMoving = isMoving;
@@ -716,20 +733,18 @@ class LocationService {
 
   async onLocation(location) {
     try {
-      const speed = location.coords.speed ?? 0;
+      let speed = location.coords.speed ?? 0;
       const accuracy = location.coords.accuracy ?? 999;
-      const isMoving = location.is_moving === true || speed >= 0.83;
       const activity = (location.activity && location.activity.type) || 'unknown';
       const activityConfidence = (location.activity && location.activity.confidence) || 0;
-      
+
       console.log('[LocationService] Location received:', {
         speed: speed.toFixed(2),
         accuracy: accuracy.toFixed(1),
-        isMoving,
         activity,
         confidence: activityConfidence
       });
-      
+
       // ===== V5 QUALITY FILTERS (v2.7.0) =====
       // V5: حدود الجودة قابلة للتعديل من Firestore لكل سائق
       const maxAcc = this.config.maxAccuracy || 50;
@@ -740,11 +755,25 @@ class LocationService {
         return;
       }
       // 2) رفض السرعات الوهمية
-      const speedKmh = speed * 3.6;
+      let speedKmh = speed * 3.6;
       if (speedKmh > maxKmh) {
         console.warn(`[LocationService] ❌ Rejected: impossible speed (${speedKmh.toFixed(0)} km/h > ${maxKmh})`);
         return;
       }
+
+      // ===== v2.7.11 FIX #1: فلتر السرعة الكاذبة لما الدقة ضعيفة =====
+      // المشكلة (DRV030 v2.7.9): كان GPS يرجع سرعات 65-81 km/h و السائق نائم في البيت
+      //                          (accuracy=21-48م) → سرعات وهمية
+      // الحل: لو accuracy > 30م و speed > 5 km/h → السرعة غير موثوقة → speed = 0
+      //       (نحتفظ بالنقطة عشان الموقع نفسه قد يكون مفيد)
+      const SPEED_TRUST_ACCURACY_M = 30;
+      if (accuracy > SPEED_TRUST_ACCURACY_M && speedKmh > 5) {
+        console.warn(`[LocationService] ⚠️ Speed unreliable (acc=${accuracy.toFixed(0)}م > 30م، speed=${speedKmh.toFixed(0)} km/h) → forcing speed=0`);
+        speed = 0;
+        speedKmh = 0;
+      }
+      // إعادة حساب isMoving بعد تصحيح السرعة
+      const isMoving = location.is_moving === true || speed >= 0.83;
       
       if (!this.currentDriverId) {
         console.warn('[LocationService] No driver ID set, skipping location save');
@@ -828,6 +857,9 @@ class LocationService {
             latitude: location.coords.latitude,
             longitude: location.coords.longitude,
           };
+          // v2.7.11 FIX #3: تخزين بصمة آخر نقطة محفوظة (للـ strict dedup)
+          this._lastDedupKey = `${location.coords.latitude.toFixed(5)},${location.coords.longitude.toFixed(5)}`;
+          this._lastDedupTime = this.lastHistorySaveTime;
         } catch (historyError) {
           console.error('[LocationService] Error saving to history:', historyError);
         }
@@ -984,6 +1016,32 @@ class LocationService {
       const activity = event.activity; // 'in_vehicle' | 'on_foot' | 'still' | 'on_bicycle' | 'running' | 'walking' | 'unknown'
       const confidence = event.confidence || 0;
       console.log('[Activity]', activity, '(confidence:', confidence + '%)');
+
+      // ===== v2.7.11 FIX #2: بداية الرحلة الأسرع (Balanced) =====
+      // المشكلة (DRV030 v2.7.9): تأخير 5-10 دقائق بين بداية الحركة و كشف التطبيق لها
+      //                          (السائق طلع من البيت → 2 كم ضاعت بدون تتبع)
+      // الحل: لو النشاط تغيّر من still إلى walking/in_vehicle/running بثقة عالية
+      //       → نجبر RNBG يخرج من stationary فوراً عبر changePace(true)
+      // ⚠️ يشتغل دائماً (بغض النظر عن activityBasedTrackingEnabled) — هذا إصلاح أساسي
+      const previousActivity = this.lastActivity;
+      const wasStillOrUnknown = (previousActivity === 'still' || previousActivity === 'unknown' || previousActivity === undefined);
+      const movingActivities = ['walking', 'on_foot', 'in_vehicle', 'running', 'on_bicycle'];
+      if (wasStillOrUnknown && movingActivities.includes(activity) && confidence >= 70) {
+        try {
+          await BackgroundGeolocation.changePace(true);
+          console.log(`[Activity] 🚀 Force-exit stationary (${previousActivity}→${activity}, conf=${confidence}%)`);
+          // كتابة لـ Firestore عشان الإدارة ترى وقت بداية الرحلة الفعلي
+          if (this.currentDriverId) {
+            firestore().collection('drivers').doc(this.currentDriverId).set({
+              tripStartedAt: firestore.FieldValue.serverTimestamp(),
+              tripStartActivity: activity,
+              tripStartConfidence: confidence,
+            }, { merge: true }).catch(() => {});
+          }
+        } catch (e) {
+          console.warn('[Activity] changePace(true) failed:', e.message);
+        }
+      }
 
       this.lastActivity = activity;
       this.lastActivityConfidence = confidence;
