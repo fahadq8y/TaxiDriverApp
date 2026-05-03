@@ -1,6 +1,6 @@
 /**
- * PermissionGate.js — v2.7.15 (إصلاح C)
- * 6 صلاحيات أساسية + 3 صلاحيات HONOR conditional
+ * PermissionGate.js — v2.7.16 (إصلاح C + H)
+ * 6 صلاحيات أساسية + 3 صلاحيات HONOR conditional + Smart Detection
  */
 
   import React, { useEffect, useState, useRef, useCallback } from 'react';
@@ -20,6 +20,7 @@
     requestPermission8_HonorAutoLaunch,
     requestPermission9_HonorPowerIntensive,
     confirmHonorPermission,
+    getHonorInvalidationReason,
   } from '../services/PermissionsHelper';
 
   const POLL_INTERVAL_MS = 2000;
@@ -29,6 +30,7 @@
       p1: false, p2: false, p3: false, p4: false, p5: false, p6: false,
       p7: true, p8: true, p9: true, isHonor: false, allGranted: false,
     });
+    const [reasons, setReasons] = useState({}); // v2.7.16: invalidation reasons
     const [loading, setLoading] = useState(true);
     const intervalRef = useRef(null);
     const appStateRef = useRef(AppState.currentState);
@@ -36,6 +38,16 @@
     const refresh = useCallback(async () => {
       const result = await checkAllPermissions();
       setState(result);
+
+      // v2.7.16: اقرأ أسباب الإلغاء التلقائي للصلاحيات HONOR
+      if (result.isHonor) {
+        const r = {};
+        if (!result.p7) r.p7 = await getHonorInvalidationReason('honor_p7_confirmed');
+        if (!result.p8) r.p8 = await getHonorInvalidationReason('honor_p8_confirmed');
+        if (!result.p9) r.p9 = await getHonorInvalidationReason('honor_p9_confirmed');
+        setReasons(r);
+      }
+
       if (loading) setLoading(false);
       return result;
     }, [loading]);
@@ -86,7 +98,6 @@
     // helper: زر "أكدت" — لو السائق فتح الإعدادات وضغط بنفسه
     const handleHonorAction = (requestFn, confirmKey) => {
       requestFn();
-      // بعد 5 ثوان نظهر تأكيد
       setTimeout(() => {
         Alert.alert(
           'تأكيد',
@@ -111,17 +122,19 @@
       { key: 'p6', label: 'صلاحية 6', granted: state.p6, onPress: requestPermission6_DeviceAdmin },
     ];
 
-    // إضافة صلاحيات HONOR فقط لو الجهاز HONOR/HUAWEI
     if (state.isHonor) {
       items.push(
-        { key: 'p7', label: 'صلاحية 7', granted: state.p7,
+        { key: 'p7', label: 'صلاحية 7', granted: state.p7, reason: reasons.p7,
           onPress: () => handleHonorAction(requestPermission7_HonorProtected, 'honor_p7_confirmed') },
-        { key: 'p8', label: 'صلاحية 8', granted: state.p8,
+        { key: 'p8', label: 'صلاحية 8', granted: state.p8, reason: reasons.p8,
           onPress: () => handleHonorAction(requestPermission8_HonorAutoLaunch, 'honor_p8_confirmed') },
-        { key: 'p9', label: 'صلاحية 9', granted: state.p9,
+        { key: 'p9', label: 'صلاحية 9', granted: state.p9, reason: reasons.p9,
           onPress: () => handleHonorAction(requestPermission9_HonorPowerIntensive, 'honor_p9_confirmed') },
       );
     }
+
+    // v2.7.16: هل أي صلاحية HONOR انغلقت تلقائياً؟ نعرض رسالة تنبيه
+    const autoDetected = state.isHonor && (reasons.p7 || reasons.p8 || reasons.p9);
 
     return (
       <ScrollView contentContainerStyle={styles.scroll}>
@@ -129,23 +142,38 @@
           <Text style={styles.title}>لتشغيل التطبيق</Text>
           <Text style={styles.subtitle}>فعّل الصلاحيات التالية:</Text>
 
+          {autoDetected && (
+            <View style={styles.warningBox}>
+              <Text style={styles.warningText}>
+                ⚠️ التطبيق اكتشف إن واحدة من الصلاحيات انغلقت من إعدادات النظام. الرجاء تفعيلها مرة ثانية.
+              </Text>
+            </View>
+          )}
+
           <View style={styles.list}>
             {items.map((item) => (
-              <View key={item.key} style={styles.row}>
-                <Text style={styles.statusIcon}>{item.granted ? '✅' : '❌'}</Text>
-                <Text style={styles.label}>{item.label}</Text>
-                {item.granted ? (
-                  <View style={styles.doneBadge}>
-                    <Text style={styles.doneText}>تم</Text>
-                  </View>
-                ) : (
-                  <TouchableOpacity
-                    style={styles.actionBtn}
-                    onPress={() => item.onPress()}
-                    activeOpacity={0.7}
-                  >
-                    <Text style={styles.actionText}>تفعيل</Text>
-                  </TouchableOpacity>
+              <View key={item.key}>
+                <View style={styles.row}>
+                  <Text style={styles.statusIcon}>{item.granted ? '✅' : '❌'}</Text>
+                  <Text style={styles.label}>{item.label}</Text>
+                  {item.granted ? (
+                    <View style={styles.doneBadge}>
+                      <Text style={styles.doneText}>تم</Text>
+                    </View>
+                  ) : (
+                    <TouchableOpacity
+                      style={styles.actionBtn}
+                      onPress={() => item.onPress()}
+                      activeOpacity={0.7}
+                    >
+                      <Text style={styles.actionText}>تفعيل</Text>
+                    </TouchableOpacity>
+                  )}
+                </View>
+                {item.reason && !item.granted && (
+                  <Text style={styles.reasonText}>
+                    🔍 اكتشف التطبيق إنها انغلقت — يحتاج تفعيلها مرة ثانية
+                  </Text>
                 )}
               </View>
             ))}
@@ -160,7 +188,10 @@
     scroll: { flexGrow: 1, backgroundColor: '#fff' },
     container: { flex: 1, padding: 24, justifyContent: 'center', minHeight: '100%' },
     title: { fontSize: 26, fontWeight: 'bold', textAlign: 'center', color: '#222', marginBottom: 8 },
-    subtitle: { fontSize: 16, textAlign: 'center', color: '#666', marginBottom: 32 },
+    subtitle: { fontSize: 16, textAlign: 'center', color: '#666', marginBottom: 16 },
+    warningBox: { backgroundColor: '#fff3cd', borderRightWidth: 4, borderRightColor: '#ffc107',
+      borderRadius: 8, padding: 12, marginBottom: 16 },
+    warningText: { fontSize: 14, color: '#856404', textAlign: 'right', lineHeight: 20 },
     list: { backgroundColor: '#fafafa', borderRadius: 12, padding: 8 },
     row: {
       flexDirection: 'row-reverse', alignItems: 'center',
@@ -173,4 +204,6 @@
     actionText: { color: '#000', fontSize: 15, fontWeight: 'bold' },
     doneBadge: { backgroundColor: '#e8f5e9', paddingVertical: 8, paddingHorizontal: 20, borderRadius: 8 },
     doneText: { color: '#2e7d32', fontSize: 15, fontWeight: 'bold' },
+    reasonText: { fontSize: 12, color: '#d32f2f', textAlign: 'right',
+      paddingHorizontal: 12, paddingBottom: 8, fontStyle: 'italic' },
   });

@@ -1186,6 +1186,88 @@ class LocationService {
     } catch (e) {
       console.warn('[Health] write failed:', e.message);
     }
+
+    // v2.7.16 (إصلاح H): Smart HONOR permission detection
+    // يفحص علامات غير مباشرة لاكتشاف إلغاء صلاحيات HONOR (p7/p8/p9)
+    this.checkHonorHealth().catch(e => console.warn('[HonorHealth] error:', e.message));
+  }
+
+  /**
+   * v2.7.16 (إصلاح H): Smart HONOR Detection
+   * يفحص 3 علامات غير مباشرة لاكتشاف إن السائق ألغى صلاحيات HONOR من System Manager:
+   *   - p7 (Protected Apps): إذا الـ Watchdog سوّى hard restart > 5 مرات في الساعة
+   *   - p8 (Auto-Launch): إذا lastBgFetchAt > 30 دقيقة (بـ HONOR background-fetch يموت بدون Auto-Launch)
+   *   - p9 (Power-Intensive): إذا app died (gap > 2 ساعة) في الـ heartbeat
+   * كل 5 دقايق (مع health monitoring) — لو لاحظ علامة، يلغي confirmation وPermissionGate يرجع تلقائياً
+   */
+  async checkHonorHealth() {
+    try {
+      if (!this.currentDriverId) return;
+
+      const { isHonorOrHuawei, invalidateHonorPermission } = require('./PermissionsHelper');
+      const isHonor = await isHonorOrHuawei();
+      if (!isHonor) return; // الفحص للـ HONOR/HUAWEI فقط
+
+      const AsyncStorage = require('@react-native-async-storage/async-storage').default;
+      const now = Date.now();
+      const invalidated = [];
+
+      // ===== 1) فحص p8 (Auto-Launch) — lastBgFetchAt =====
+      try {
+        const driverDoc = await firestore().collection('drivers').doc(this.currentDriverId).get();
+        const data = driverDoc.exists ? driverDoc.data() : {};
+        if (data.lastBgFetchAt) {
+          const lastMs = data.lastBgFetchAt.toMillis ? data.lastBgFetchAt.toMillis() : new Date(data.lastBgFetchAt).getTime();
+          const ageMin = (now - lastMs) / 60000;
+          if (ageMin > 30) {
+            const wasInvalidated = await invalidateHonorPermission('honor_p8_confirmed', `bgfetch_dead_${ageMin.toFixed(0)}min`);
+            if (wasInvalidated) invalidated.push('p8 (Auto-Launch)');
+          }
+        }
+      } catch (e) { /* silent */ }
+
+      // ===== 2) فحص p7 (Protected Apps) — restart count =====
+      try {
+        const count = parseInt((await AsyncStorage.getItem('honor_restart_count_hour')) || '0', 10);
+        if (count > 5) {
+          const wasInvalidated = await invalidateHonorPermission('honor_p7_confirmed', `restarts_${count}_in_hour`);
+          if (wasInvalidated) invalidated.push('p7 (Protected Apps)');
+        }
+      } catch (e) { /* silent */ }
+
+      // ===== 3) فحص p9 (Power-Intensive) — gap في heartbeat =====
+      try {
+        const lastSeen = parseInt((await AsyncStorage.getItem('honor_last_alive_ping')) || '0', 10);
+        if (lastSeen > 0) {
+          const gapMin = (now - lastSeen) / 60000;
+          if (gapMin > 120) { // gap > 2 ساعات = التطبيق مات
+            const wasInvalidated = await invalidateHonorPermission('honor_p9_confirmed', `app_dead_${gapMin.toFixed(0)}min`);
+            if (wasInvalidated) invalidated.push('p9 (Power-Intensive)');
+          }
+        }
+        // حدّث ping (إثبات إن التطبيق شغال الحين)
+        await AsyncStorage.setItem('honor_last_alive_ping', String(now));
+      } catch (e) { /* silent */ }
+
+      // اكتب نتيجة الفحص في Firestore (للمراقبة من الـ webpage)
+      try {
+        await firestore().collection('drivers').doc(this.currentDriverId).set({
+          honorHealthCheck: {
+            checkedAt: now,
+            invalidated: invalidated,
+            restartCountHour: parseInt((await AsyncStorage.getItem('honor_restart_count_hour')) || '0', 10),
+          },
+        }, { merge: true });
+      } catch (_) {}
+
+      if (invalidated.length > 0) {
+        console.warn('[HonorHealth] 🚨 Invalidated permissions:', invalidated.join(', '));
+      } else {
+        console.log('[HonorHealth] ✅ All HONOR perms still valid');
+      }
+    } catch (e) {
+      console.warn('[HonorHealth] checkHonorHealth error:', e.message);
+    }
   }
 
   async updateDriverStatus(isActive) {

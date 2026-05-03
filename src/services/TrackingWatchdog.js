@@ -87,6 +87,25 @@ class TrackingWatchdog {
       this.totalRestarts++;
       this.consecutiveFailures = 0;
       console.log('[Watchdog] ✅ Hard restart complete (total restarts:', this.totalRestarts, ')');
+
+      // v2.7.16 (إصلاح H): سجّل العداد للساعة الأخيرة
+      // HonorHealthMonitor يستخدمه لاكتشاف إن p7 (Protected Apps) ملغى
+      try {
+        const AsyncStorage = require('@react-native-async-storage/async-storage').default;
+        const k = 'honor_restart_count_hour';
+        const tk = 'honor_restart_count_hour_started';
+        const now = Date.now();
+        const start = parseInt((await AsyncStorage.getItem(tk)) || '0', 10);
+        let count = parseInt((await AsyncStorage.getItem(k)) || '0', 10);
+        // reset كل ساعة
+        if (!start || (now - start) > 3600000) {
+          count = 0;
+          await AsyncStorage.setItem(tk, String(now));
+        }
+        count++;
+        await AsyncStorage.setItem(k, String(count));
+        console.log('[Watchdog] restart counter (last hour):', count);
+      } catch (_) {}
       return true;
     } catch (e) {
       this.consecutiveFailures++;

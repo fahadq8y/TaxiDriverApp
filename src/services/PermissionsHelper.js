@@ -231,5 +231,36 @@
     try {
       const AsyncStorage = require('@react-native-async-storage/async-storage').default;
       await AsyncStorage.setItem(key, 'true');
+      // v2.7.16: امسح أي علامة invalidation سابقة
+      await AsyncStorage.removeItem(key + '_invalidated_reason');
+      await AsyncStorage.removeItem(key + '_invalidated_at');
     } catch (e) {}
+  }
+
+  // ===== v2.7.16 (إصلاح H): Smart HONOR detection =====
+  // يستخدمه HonorHealthMonitor (داخل LocationService) لإلغاء confirmation
+  // لما يلاحظ علامات إن السائق ألغى الصلاحية من system manager
+  export async function invalidateHonorPermission(key, reason) {
+    try {
+      const AsyncStorage = require('@react-native-async-storage/async-storage').default;
+      const wasConfirmed = (await AsyncStorage.getItem(key)) === 'true';
+      if (!wasConfirmed) return false; // ما كانت مفعلة أصلاً
+      await AsyncStorage.removeItem(key);
+      await AsyncStorage.setItem(key + '_invalidated_reason', String(reason || 'unknown'));
+      await AsyncStorage.setItem(key + '_invalidated_at', String(Date.now()));
+      console.warn('[HonorHealth] ❌ Invalidated', key, '- reason:', reason);
+      return true; // تم الإلغاء
+    } catch (e) {
+      console.warn('[HonorHealth] invalidate failed:', e.message);
+      return false;
+    }
+  }
+
+  // يقرأ سبب الإلغاء عشان نعرضه للسائق في شاشة الصلاحيات
+  export async function getHonorInvalidationReason(key) {
+    try {
+      const AsyncStorage = require('@react-native-async-storage/async-storage').default;
+      const reason = await AsyncStorage.getItem(key + '_invalidated_reason');
+      return reason || null;
+    } catch (e) { return null; }
   }
