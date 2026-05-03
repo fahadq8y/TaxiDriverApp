@@ -353,6 +353,8 @@ if (BackgroundFetch) {
       try {
         const AsyncStorage = require('@react-native-async-storage/async-storage').default;
         const driverId = await AsyncStorage.getItem('employeeNumber');
+        // v2.7.17: خزّن في AsyncStorage عشان SelfDiagnostics يقدر يقرأها
+        await AsyncStorage.setItem('last_bg_fetch_at', String(Date.now()));
         if (driverId) {
           await firestore().collection('drivers').doc(driverId).set({
             lastBgFetchAt: firestore.FieldValue.serverTimestamp(),

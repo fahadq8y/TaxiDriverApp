@@ -591,7 +591,30 @@ class LocationService {
 
       // v2.7.5 (الحل #8): شغل health monitoring
       this.startHealthMonitoring();
-      
+
+      // v2.7.17 (إصلاح J): HONOR Wakelock + Periodic Cycle
+      // يحل مشكلة "Silent Death" بعد 60 دقيقة على HONOR/Huawei
+      try {
+        const { NativeModules, Platform } = require('react-native');
+        if (Platform.OS === 'android' && NativeModules.BatteryOptimization?.acquireHonorWakelock) {
+          const result = await NativeModules.BatteryOptimization.acquireHonorWakelock();
+          console.log('[LocationService] 🔋 HONOR wakelock:', result);
+        }
+      } catch (e) { console.warn('[LocationService] HONOR wakelock failed:', e.message); }
+
+      // كل 55 دقيقة: cycle wakelock + RNBG (يكسر دورة HwPFWService)
+      if (this.wakelockCycleInterval) clearInterval(this.wakelockCycleInterval);
+      this.wakelockCycleInterval = setInterval(() => {
+        this.cycleRNBG().catch(e => console.warn('[LocationService] cycleRNBG err:', e.message));
+      }, 55 * 60 * 1000);
+      console.log('[LocationService] ⏰ Wakelock cycle scheduled every 55 min');
+
+      // v2.7.17 (إصلاح K): Self-Diagnostics — يكتب snapshot كل 5 دقائق
+      try {
+        const SelfDiagnostics = require('./SelfDiagnostics').default;
+        await SelfDiagnostics.start(driverId);
+      } catch (e) { console.warn('[LocationService] SelfDiag start failed:', e.message); }
+
       return true;
     } catch (error) {
       console.error('[LocationService] Start error:', error);
@@ -600,6 +623,46 @@ class LocationService {
       
       // Throw error to be caught by MainScreen
       throw new Error(`فشل بدء الخدمة: ${error.message || 'خطأ غير معروف'}`);
+    }
+  }
+
+  /**
+   * v2.7.17 (إصلاح J): Cycle RNBG + WakeLock
+   * يحل مشكلة HwPFWService اللي يقتل الـ wakelock بعد 60 دقيقة
+   * بنسوي stop → wait 5s → start → cycle wakelock
+   * النتيجة: العداد يصفر، التتبع يكمل بدون موت صامت
+   */
+  async cycleRNBG() {
+    try {
+      console.log('[LocationService] 🔄 ====== Wakelock Cycle Starting ======');
+      const AsyncStorage = require('@react-native-async-storage/async-storage').default;
+      const { NativeModules, Platform } = require('react-native');
+
+      // 1) cycle native wakelock (HONOR-friendly tag)
+      if (Platform.OS === 'android' && NativeModules.BatteryOptimization?.cycleHonorWakelock) {
+        try {
+          const r = await NativeModules.BatteryOptimization.cycleHonorWakelock();
+          console.log('[LocationService] HONOR wakelock cycled:', r);
+        } catch (e) { console.warn('[LocationService] HONOR wakelock cycle err:', e.message); }
+      }
+
+      // 2) restart RNBG (كسر دورة wakelock الداخلي للـ plugin)
+      const BackgroundGeolocation = require('react-native-background-geolocation').default;
+      try {
+        await BackgroundGeolocation.stop();
+        console.log('[LocationService] RNBG stopped (cycle)');
+        await new Promise(r => setTimeout(r, 5000));
+        await BackgroundGeolocation.start();
+        console.log('[LocationService] RNBG started (cycle)');
+      } catch (e) { console.warn('[LocationService] RNBG cycle err:', e.message); }
+
+      // 3) سجل وقت آخر cycle
+      await AsyncStorage.setItem('last_wakelock_cycle_at', String(Date.now()));
+      console.log('[LocationService] ✅ ====== Wakelock Cycle Complete ======');
+      return true;
+    } catch (e) {
+      console.error('[LocationService] cycleRNBG failed:', e.message);
+      return false;
     }
   }
 
@@ -733,6 +796,13 @@ class LocationService {
 
   async onLocation(location) {
     try {
+      // v2.7.17 (إصلاح I): سجّل وقت آخر استلام location
+      // SelfDiagnostics + Silent Death Detection يستخدمونه
+      try {
+        const AsyncStorage = require('@react-native-async-storage/async-storage').default;
+        await AsyncStorage.setItem('last_location_received_at', String(Date.now()));
+      } catch (_) {}
+
       let speed = location.coords.speed ?? 0;
       const accuracy = location.coords.accuracy ?? 999;
       const activity = (location.activity && location.activity.type) || 'unknown';
@@ -1234,6 +1304,56 @@ class LocationService {
           if (wasInvalidated) invalidated.push('p7 (Protected Apps)');
         }
       } catch (e) { /* silent */ }
+
+      // ===== v2.7.17 إصلاح I: Silent Death Detection =====
+      // RNBG.getState() = enabled لكن آخر location قبل > 15 دقيقة → موت صامت
+      // (HwPFWService قتل الـ wakelock، الخدمة "حية" نظرياً بس ما تبعث locations)
+      try {
+        const lastLoc = parseInt((await AsyncStorage.getItem('last_location_received_at')) || '0', 10);
+        if (lastLoc > 0) {
+          const ageMin = (now - lastLoc) / 60000;
+          if (ageMin > 15) {
+            const BackgroundGeolocation = require('react-native-background-geolocation').default;
+            const state = await BackgroundGeolocation.getState();
+            if (state.enabled) {
+              console.warn('[HonorHealth] 🚨 SILENT DEATH detected! gap=' + ageMin.toFixed(0) + ' min, RNBG.enabled=true');
+
+              // عداد مرات الموت الصامت في الساعة الأخيرة
+              const k = 'silent_death_count_hour';
+              const tk = 'silent_death_count_hour_started';
+              const start = parseInt((await AsyncStorage.getItem(tk)) || '0', 10);
+              let count = parseInt((await AsyncStorage.getItem(k)) || '0', 10);
+              if (!start || (now - start) > 3600000) {
+                count = 0;
+                await AsyncStorage.setItem(tk, String(now));
+              }
+              count++;
+              await AsyncStorage.setItem(k, String(count));
+
+              // محاولة 1: cycle wakelock (الأسرع)
+              try {
+                await this.cycleRNBG();
+                invalidated.push(`silent_death_${ageMin.toFixed(0)}min_cycled`);
+              } catch (e) {
+                // محاولة 2: hard restart الكامل
+                try {
+                  const TrackingWatchdog = require('./TrackingWatchdog').default;
+                  if (TrackingWatchdog.hardRestartRNBG) {
+                    await TrackingWatchdog.hardRestartRNBG();
+                  }
+                } catch (_) {}
+              }
+
+              // إذا تكرر 3 مرات في ساعة → أبطل صلاحيات HONOR (فرصة السائق فعلاً ألغاها)
+              if (count >= 3) {
+                await invalidateHonorPermission('honor_p7_confirmed', `silent_death_x${count}`);
+                await invalidateHonorPermission('honor_p9_confirmed', `silent_death_x${count}`);
+                invalidated.push(`silent_death_repeated_x${count}`);
+              }
+            }
+          }
+        }
+      } catch (e) { console.warn('[HonorHealth] silent death check err:', e.message); }
 
       // ===== 3) فحص p9 (Power-Intensive) — gap في heartbeat =====
       try {

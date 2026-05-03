@@ -193,6 +193,67 @@ package com.taxidriverapp;
           } catch (Exception e) { e.printStackTrace(); }
       }
 
+      // ===== v2.7.17: HONOR Whitelisted WakeLock =====
+      // HwPFWService يقتل الـ wakelocks بعد 60 دقيقة، إلا إذا كان tag في القائمة البيضاء
+      // (مثل *location* أو *alarm*). هذا الـ wakelock يكمل التتبع بعد الساعة الأولى
+      private static PowerManager.WakeLock honorWakeLock = null;
+
+      @ReactMethod
+      public void acquireHonorWakelock(Promise promise) {
+          try {
+              PowerManager pm = (PowerManager) reactContext.getSystemService(Context.POWER_SERVICE);
+              if (honorWakeLock != null && honorWakeLock.isHeld()) {
+                  promise.resolve("already_held");
+                  return;
+              }
+              // tag في القائمة البيضاء لـ HwPFWService
+              honorWakeLock = pm.newWakeLock(
+                  PowerManager.PARTIAL_WAKE_LOCK,
+                  "LocationManagerService:TaxiDriver"
+              );
+              honorWakeLock.setReferenceCounted(false);
+              honorWakeLock.acquire(); // unlimited (نديره يدوياً)
+              promise.resolve("acquired");
+          } catch (Exception e) {
+              promise.reject("ERR_WAKELOCK", e.getMessage());
+          }
+      }
+
+      @ReactMethod
+      public void releaseHonorWakelock(Promise promise) {
+          try {
+              if (honorWakeLock != null && honorWakeLock.isHeld()) {
+                  honorWakeLock.release();
+                  honorWakeLock = null;
+                  promise.resolve("released");
+              } else {
+                  promise.resolve("not_held");
+              }
+          } catch (Exception e) {
+              promise.reject("ERR_WAKELOCK", e.getMessage());
+          }
+      }
+
+      @ReactMethod
+      public void cycleHonorWakelock(Promise promise) {
+          try {
+              // release + reacquire — يكسر دورة 60 دقيقة لـ HwPFWService
+              if (honorWakeLock != null && honorWakeLock.isHeld()) {
+                  honorWakeLock.release();
+              }
+              PowerManager pm = (PowerManager) reactContext.getSystemService(Context.POWER_SERVICE);
+              honorWakeLock = pm.newWakeLock(
+                  PowerManager.PARTIAL_WAKE_LOCK,
+                  "LocationManagerService:TaxiDriver"
+              );
+              honorWakeLock.setReferenceCounted(false);
+              honorWakeLock.acquire();
+              promise.resolve("cycled");
+          } catch (Exception e) {
+              promise.reject("ERR_WAKELOCK", e.getMessage());
+          }
+      }
+
       // ===== v2.7.15: HONOR/HUAWEI Power-Intensive Prompt (مهم جداً!) =====
       @ReactMethod
       public void openHonorPowerIntensive() {
