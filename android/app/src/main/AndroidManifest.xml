@@ -19,8 +19,11 @@
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_LOCATION" />
     
-    <!-- ===== ANDROID 14+ EXACT ALARM PERMISSION ===== -->
+    <!-- ===== EXACT ALARM PERMISSIONS (v2.7.15: إصلاح F) ===== -->
+    <!-- USE_EXACT_ALARM لـ Android 14+ (silent — لا يحتاج موافقة) -->
     <uses-permission android:minSdkVersion="34" android:name="android.permission.USE_EXACT_ALARM" />
+    <!-- SCHEDULE_EXACT_ALARM لـ Android 12-13 (يحتاج موافقة المستخدم) -->
+    <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM" />
     
     <!-- ===== ANDROID 13+ NOTIFICATION PERMISSION ===== -->
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />

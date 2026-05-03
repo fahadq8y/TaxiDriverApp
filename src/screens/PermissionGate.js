@@ -1,6 +1,7 @@
 /**
-   * PermissionGate.js — v2.7.14 (6 permissions)
-   */
+ * PermissionGate.js — v2.7.15 (إصلاح C)
+ * 6 صلاحيات أساسية + 3 صلاحيات HONOR conditional
+ */
 
   import React, { useEffect, useState, useRef, useCallback } from 'react';
   import {
@@ -15,12 +16,19 @@
     requestPermission4_Notifications,
     requestPermission5_Overlay,
     requestPermission6_DeviceAdmin,
+    requestPermission7_HonorProtected,
+    requestPermission8_HonorAutoLaunch,
+    requestPermission9_HonorPowerIntensive,
+    confirmHonorPermission,
   } from '../services/PermissionsHelper';
 
   const POLL_INTERVAL_MS = 2000;
 
   export default function PermissionGate({ children }) {
-    const [state, setState] = useState({ p1: false, p2: false, p3: false, p4: false, p5: false, p6: false, allGranted: false });
+    const [state, setState] = useState({
+      p1: false, p2: false, p3: false, p4: false, p5: false, p6: false,
+      p7: true, p8: true, p9: true, isHonor: false, allGranted: false,
+    });
     const [loading, setLoading] = useState(true);
     const intervalRef = useRef(null);
     const appStateRef = useRef(AppState.currentState);
@@ -75,6 +83,25 @@
       );
     }
 
+    // helper: زر "أكدت" — لو السائق فتح الإعدادات وضغط بنفسه
+    const handleHonorAction = (requestFn, confirmKey) => {
+      requestFn();
+      // بعد 5 ثوان نظهر تأكيد
+      setTimeout(() => {
+        Alert.alert(
+          'تأكيد',
+          'هل قمت بتفعيل الإعداد؟',
+          [
+            { text: 'لا', style: 'cancel' },
+            { text: 'نعم، فعّلته', onPress: async () => {
+              await confirmHonorPermission(confirmKey);
+              refresh();
+            }},
+          ]
+        );
+      }, 5000);
+    };
+
     const items = [
       { key: 'p1', label: 'صلاحية 1', granted: state.p1, onPress: requestPermission1_Location },
       { key: 'p2', label: 'صلاحية 2', granted: state.p2, onPress: requestPermission2_BackgroundLocation },
@@ -83,6 +110,18 @@
       { key: 'p5', label: 'صلاحية 5', granted: state.p5, onPress: requestPermission5_Overlay },
       { key: 'p6', label: 'صلاحية 6', granted: state.p6, onPress: requestPermission6_DeviceAdmin },
     ];
+
+    // إضافة صلاحيات HONOR فقط لو الجهاز HONOR/HUAWEI
+    if (state.isHonor) {
+      items.push(
+        { key: 'p7', label: 'صلاحية 7', granted: state.p7,
+          onPress: () => handleHonorAction(requestPermission7_HonorProtected, 'honor_p7_confirmed') },
+        { key: 'p8', label: 'صلاحية 8', granted: state.p8,
+          onPress: () => handleHonorAction(requestPermission8_HonorAutoLaunch, 'honor_p8_confirmed') },
+        { key: 'p9', label: 'صلاحية 9', granted: state.p9,
+          onPress: () => handleHonorAction(requestPermission9_HonorPowerIntensive, 'honor_p9_confirmed') },
+      );
+    }
 
     return (
       <ScrollView contentContainerStyle={styles.scroll}>
@@ -135,4 +174,3 @@
     doneBadge: { backgroundColor: '#e8f5e9', paddingVertical: 8, paddingHorizontal: 20, borderRadius: 8 },
     doneText: { color: '#2e7d32', fontSize: 15, fontWeight: 'bold' },
   });
-  

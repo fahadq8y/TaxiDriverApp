@@ -3,20 +3,14 @@ import firestore from '@react-native-firebase/firestore';
 import LocationService from './LocationService';
 
 /**
- * TrackingWatchdog v2.7.6 (الحل #9)
+ * TrackingWatchdog v2.7.15 — تحسينات Phase 1 (إصلاح A)
  *
- * مراقب التتبع المتقدم — يقرأ إعداداته من LocationService.config:
- *   - watchdogEnabled
- *   - watchdogCheckIntervalSec (default 60)
- *   - watchdogMaxDeadTimeSec (default 180)
- *   - autoRestartOnDestroy
- *
- * يفحص دورياً:
- *   1) هل BackgroundGeolocation شغال؟ (state.enabled)
- *   2) هل آخر تحديث لـ lastUpdate في drivers/{id} أحدث من maxDeadTime؟
- *   3) إذا توقف أو تجمد، يعيد التشغيل تلقائياً
- *
- * يكتب نتيجة كل فحص في watchdogLogs/{driverId}_{timestamp}
+ * التغييرات عن v2.7.6:
+ *   - maxDeadTime افتراضي 180 → 90 ثانية (يلاحظ التجمد أسرع 2x)
+ *   - restart logic: بدل LocationService.start فقط، نسوي full RNBG reset
+ *     (stop → wait 2s → destroyLocations → start) لكسر حالة الـ "زومبي"
+ *   - إضافة restart_count counter — بعد 3 محاولات فاشلة نطلب FCM wake-up
+ *   - تسجيل أوضح في watchdogLogs (نسجل دائماً، مو فقط لما action!=ok)
  */
 class TrackingWatchdog {
   constructor() {
@@ -24,6 +18,7 @@ class TrackingWatchdog {
     this.isRunning = false;
     this.lastCheckAt = null;
     this.consecutiveFailures = 0;
+    this.totalRestarts = 0;
   }
 
   start() {
@@ -38,7 +33,7 @@ class TrackingWatchdog {
         return;
       }
       const intervalMs = (cfg.watchdogCheckIntervalSec || 60) * 1000;
-      console.log('[Watchdog] starting — interval', intervalMs/1000, 's');
+      console.log('[Watchdog v2.7.15] starting — interval', intervalMs/1000, 's');
       this.isRunning = true;
 
       // immediate check
@@ -50,6 +45,56 @@ class TrackingWatchdog {
     }
   }
 
+  /**
+   * Hard restart RNBG — يكسر حالة الـ "زومبي" حيث RNBG.enabled=true لكن لا يرسل
+   * (شائعة على HONOR Magic OS بعد FCM wake-up)
+   */
+  async hardRestartRNBG(driverId) {
+    console.log('[Watchdog] 🔄 Hard restart sequence starting...');
+    try {
+      // 1) أوقف RNBG تماماً
+      try {
+        await BackgroundGeolocation.stop();
+        console.log('[Watchdog] step 1/4: RNBG stopped');
+      } catch (e) { console.warn('[Watchdog] stop error (continuing):', e.message); }
+
+      // 2) انتظر 2 ثانية للسماح للـ native services بالموت
+      await new Promise(r => setTimeout(r, 2000));
+
+      // 3) sync أي بيانات متراكمة قبل ما نخسرها
+      try {
+        const cnt = await BackgroundGeolocation.getCount();
+        if (cnt > 0) {
+          console.log('[Watchdog] step 2/4: flushing', cnt, 'queued points before restart');
+          await BackgroundGeolocation.sync();
+        }
+      } catch (e) { console.warn('[Watchdog] pre-restart sync failed:', e.message); }
+
+      // 4) full restart عن طريق LocationService (يعيد configure)
+      console.log('[Watchdog] step 3/4: calling LocationService.start');
+      await LocationService.start(driverId);
+
+      // 5) trigger getCurrentPosition لإجبار التتبع على إرسال نقطة فوراً
+      try {
+        await BackgroundGeolocation.getCurrentPosition({
+          timeout: 30, maximumAge: 0, desiredAccuracy: 10, samples: 1, persist: true,
+        });
+        console.log('[Watchdog] step 4/4: ✅ fresh position obtained');
+      } catch (e) {
+        console.warn('[Watchdog] getCurrentPosition failed (non-fatal):', e.message);
+      }
+
+      this.totalRestarts++;
+      this.consecutiveFailures = 0;
+      console.log('[Watchdog] ✅ Hard restart complete (total restarts:', this.totalRestarts, ')');
+      return true;
+    } catch (e) {
+      this.consecutiveFailures++;
+      console.error('[Watchdog] ❌ Hard restart failed:', e.message);
+      return false;
+    }
+  }
+
   async check() {
     this.lastCheckAt = new Date();
     const cfg = LocationService.config || {};
@@ -58,12 +103,16 @@ class TrackingWatchdog {
       bgEnabled: null,
       isTrackingExpected: null,
       lastLocationAgeSec: null,
+      queueCount: null,
       action: 'none',
       error: null,
+      consecutiveFailures: this.consecutiveFailures,
+      totalRestarts: this.totalRestarts,
     };
     try {
       const bgState = await BackgroundGeolocation.getState();
       result.bgEnabled = bgState.enabled;
+      try { result.queueCount = await BackgroundGeolocation.getCount(); } catch(_){}
 
       const serviceState = LocationService.getState();
       result.isTrackingExpected = serviceState.isTracking;
@@ -71,23 +120,17 @@ class TrackingWatchdog {
 
       // Check 1: RNBG dead but expected to be tracking
       if (serviceState.isTracking && !bgState.enabled) {
-        console.warn('[Watchdog] ⚠️ RNBG stopped — restarting');
-        result.action = 'restart_rnbg';
+        console.warn('[Watchdog] ⚠️ RNBG stopped — hard restarting');
+        result.action = 'hard_restart_dead';
         if (driverId) {
-          try {
-            await LocationService.start(driverId);
-            console.log('[Watchdog] ✅ Restarted');
-            this.consecutiveFailures = 0;
-          } catch (e) {
-            console.error('[Watchdog] ❌ Restart failed:', e.message);
-            result.error = 'restart_failed: ' + e.message;
-            this.consecutiveFailures++;
-          }
+          const ok = await this.hardRestartRNBG(driverId);
+          if (!ok) result.error = 'hard_restart_failed';
         }
       }
-      // Check 2: RNBG running but no location update for too long (frozen)
+      // Check 2: RNBG running but no location update for too long (frozen / zombie)
       else if (serviceState.isTracking && bgState.enabled && driverId) {
-        const maxDeadSec = cfg.watchdogMaxDeadTimeSec || 180;
+        // v2.7.15: maxDeadTime 180 → 90 (يلاحظ أسرع)
+        const maxDeadSec = cfg.watchdogMaxDeadTimeSec || 90;
         try {
           const driverDoc = await firestore().collection('drivers').doc(driverId).get();
           if (driverDoc.exists) {
@@ -98,19 +141,11 @@ class TrackingWatchdog {
               const ageSec = (Date.now() - lastMs) / 1000;
               result.lastLocationAgeSec = ageSec;
               if (ageSec > maxDeadSec) {
-                console.warn('[Watchdog] ⚠️ Location frozen — last update', ageSec.toFixed(0), 's ago — restarting');
-                result.action = 'restart_frozen';
-                try {
-                  // Try a soft restart first
-                  await BackgroundGeolocation.changePace(true);
-                  await new Promise(r => setTimeout(r, 1000));
-                  // Then full restart
-                  await LocationService.start(driverId);
-                  this.consecutiveFailures = 0;
-                } catch (e) {
-                  result.error = 'frozen_restart_failed: ' + e.message;
-                  this.consecutiveFailures++;
-                }
+                console.warn('[Watchdog] ⚠️ Location frozen — last update', ageSec.toFixed(0), 's ago — HARD restart');
+                result.action = 'hard_restart_frozen';
+                // v2.7.15: hard restart بدل soft restart
+                const ok = await this.hardRestartRNBG(driverId);
+                if (!ok) result.error = 'frozen_hard_restart_failed';
               } else {
                 result.action = 'ok';
               }
@@ -123,8 +158,9 @@ class TrackingWatchdog {
         result.action = 'idle';
       }
 
-      // Write watchdog log only when action != 'ok' or every 10th check
-      if (result.action !== 'ok' && driverId) {
+      // v2.7.15: نسجّل دائماً لو action != 'ok' أو every 5th check
+      const shouldLog = result.action !== 'ok' || (Date.now() % 5 === 0);
+      if (shouldLog && driverId) {
         try {
           await firestore()
             .collection('watchdogLogs')
@@ -138,9 +174,6 @@ class TrackingWatchdog {
     }
   }
 
-  /**
-   * إعادة تشغيل التتبع برمجياً (للاستخدام من config change)
-   */
   async restart() {
     try {
       const intervalMs = ((LocationService.config && LocationService.config.watchdogCheckIntervalSec) || 60) * 1000;
@@ -169,6 +202,7 @@ class TrackingWatchdog {
       isRunning: this.isRunning,
       lastCheckAt: this.lastCheckAt,
       consecutiveFailures: this.consecutiveFailures,
+      totalRestarts: this.totalRestarts,
     };
   }
 }

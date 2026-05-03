@@ -383,6 +383,8 @@ if (BackgroundFetch) {
     requiresDeviceIdle: false,
     requiresBatteryNotLow: false,
     requiresStorageNotLow: false,
+    // v2.7.15 (إصلاح G): استخدم AlarmManager backup على Android (أهم لـ HONOR)
+    forceAlarmManager: true,
   }, bgFetchHandler, bgFetchTimeoutHandler).then((status) => {
     console.log('[BG-Fetch] configured — status:', status);
   }).catch((e) => {
@@ -394,6 +396,28 @@ if (BackgroundFetch) {
     console.log('[BG-Fetch:Headless] taskId=', taskId);
     await bgFetchHandler(taskId);
   });
+
+  // v2.7.15 (إصلاح G): مهمة احتياطية ثانية كل 20 دقيقة
+  // HONOR قد يقتل المهمة الأساسية، فنضيف backup task باسم مختلف
+  setTimeout(() => {
+    try {
+      BackgroundFetch.scheduleTask({
+        taskId: 'com.dp.taxidriver.heartbeat',
+        delay: 20 * 60 * 1000,        // 20 دقيقة
+        periodic: true,
+        forceAlarmManager: true,
+        stopOnTerminate: false,
+        enableHeadless: true,
+        startOnBoot: true,
+      }).then(() => {
+        console.log('[BG-Fetch] backup task scheduled (20min, AlarmManager)');
+      }).catch((e) => {
+        console.warn('[BG-Fetch] backup scheduleTask failed:', e.message);
+      });
+    } catch (e) {
+      console.warn('[BG-Fetch] backup scheduleTask threw:', e.message);
+    }
+  }, 5000);
 }
 
 // ===== FCM WAKE-UP HANDLER (v2.7.2) =====
@@ -425,16 +449,31 @@ if (BackgroundFetch) {
 
       console.log('[FCM] Restarting tracking for driver:', driverId);
 
-      // محاولة 1: BackgroundGeolocation.start
+      // v2.7.15 (إصلاح E): Hard restart بدل start فقط
+      // المشكلة: على HONOR, RNBG.start() يرجع enabled=true لكن RNBG في حالة "زومبي"
+      // الحل: stop → wait → sync → start (full reset)
       let bgRestartOk = false;
       let bgError = null;
       try {
+        // 1) stop أول
+        try { await BackgroundGeolocation.stop(); } catch(_) {}
+        // 2) flush queue قبل ما نفقدها
+        try {
+          const cnt = await BackgroundGeolocation.getCount();
+          if (cnt > 0) {
+            console.log('[FCM] flushing', cnt, 'queued points before restart');
+            await BackgroundGeolocation.sync();
+          }
+        } catch(_) {}
+        // 3) wait للسماح للـ native services بالموت
+        await new Promise(r => setTimeout(r, 1500));
+        // 4) start جديد
         const state = await BackgroundGeolocation.start();
-        console.log('[FCM] ✅ BackgroundGeolocation restarted:', state.enabled);
+        console.log('[FCM] ✅ BackgroundGeolocation hard-restarted:', state.enabled);
         bgRestartOk = true;
       } catch (e) {
         bgError = e.message || String(e);
-        console.error('[FCM] ❌ BackgroundGeolocation.start failed:', bgError);
+        console.error('[FCM] ❌ Hard restart failed:', bgError);
       }
 
       // محاولة 2: getCurrentPosition - يجبر التتبع على إرسال موقع فوري

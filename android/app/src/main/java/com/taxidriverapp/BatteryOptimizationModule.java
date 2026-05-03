@@ -122,5 +122,99 @@ package com.taxidriverapp;
               e.printStackTrace();
           }
       }
+
+      // ===== v2.7.15: Device brand detection (إصلاح B) =====
+      @ReactMethod
+      public void getDeviceBrand(Promise promise) {
+          try {
+              String brand = (Build.BRAND != null ? Build.BRAND : "").toLowerCase();
+              String manufacturer = (Build.MANUFACTURER != null ? Build.MANUFACTURER : "").toLowerCase();
+              String model = (Build.MODEL != null ? Build.MODEL : "");
+              promise.resolve(brand + "|" + manufacturer + "|" + model);
+          } catch (Exception e) {
+              promise.reject("ERROR", e.getMessage());
+          }
+      }
+
+      // ===== v2.7.15: HONOR/HUAWEI Protected Apps =====
+      // يفتح صفحة "Protected Apps" أو "Phone Manager → Protected apps"
+      // التطبيقات المحمية لا يقتلها HONOR في الخلفية
+      @ReactMethod
+      public void openHonorProtectedApps() {
+          try {
+              Intent intent = null;
+              // محاولات متعددة لأن الـ intent يختلف بين إصدارات Magic OS
+              String[][] candidates = new String[][] {
+                  {"com.huawei.systemmanager", "com.huawei.systemmanager.optimize.process.ProtectActivity"},
+                  {"com.huawei.systemmanager", "com.huawei.systemmanager.startupmgr.ui.StartupNormalAppListActivity"},
+                  {"com.huawei.systemmanager", "com.huawei.systemmanager.appcontrol.activity.StartupAppControlActivity"},
+                  {"com.huawei.systemmanager", "com.huawei.systemmanager.power.ui.HwPowerManagerActivity"},
+              };
+              for (String[] c : candidates) {
+                  try {
+                      intent = new Intent();
+                      intent.setClassName(c[0], c[1]);
+                      intent.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+                      reactContext.startActivity(intent);
+                      return;
+                  } catch (Exception ignore) { intent = null; }
+              }
+              // fallback: افتح Battery Optimization العادي
+              if (intent == null) {
+                  Intent fb = new Intent(Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS);
+                  fb.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+                  reactContext.startActivity(fb);
+              }
+          } catch (Exception e) { e.printStackTrace(); }
+      }
+
+      // ===== v2.7.15: HONOR/HUAWEI Auto-Launch =====
+      @ReactMethod
+      public void openHonorAutoLaunch() {
+          try {
+              String[][] candidates = new String[][] {
+                  {"com.huawei.systemmanager", "com.huawei.systemmanager.startupmgr.ui.StartupNormalAppListActivity"},
+                  {"com.huawei.systemmanager", "com.huawei.systemmanager.appcontrol.activity.StartupAppControlActivity"},
+              };
+              for (String[] c : candidates) {
+                  try {
+                      Intent intent = new Intent();
+                      intent.setClassName(c[0], c[1]);
+                      intent.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+                      reactContext.startActivity(intent);
+                      return;
+                  } catch (Exception ignore) {}
+              }
+              // fallback
+              Intent fb = new Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS);
+              fb.setData(Uri.parse("package:" + reactContext.getPackageName()));
+              fb.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+              reactContext.startActivity(fb);
+          } catch (Exception e) { e.printStackTrace(); }
+      }
+
+      // ===== v2.7.15: HONOR/HUAWEI Power-Intensive Prompt (مهم جداً!) =====
+      @ReactMethod
+      public void openHonorPowerIntensive() {
+          try {
+              String[][] candidates = new String[][] {
+                  {"com.huawei.systemmanager", "com.huawei.systemmanager.power.ui.HwPowerManagerActivity"},
+                  {"com.huawei.systemmanager", "com.huawei.systemmanager.optimize.bootstart.BootStartActivity"},
+              };
+              for (String[] c : candidates) {
+                  try {
+                      Intent intent = new Intent();
+                      intent.setClassName(c[0], c[1]);
+                      intent.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+                      reactContext.startActivity(intent);
+                      return;
+                  } catch (Exception ignore) {}
+              }
+              // fallback: Battery settings
+              Intent fb = new Intent(Settings.ACTION_BATTERY_SAVER_SETTINGS);
+              fb.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+              reactContext.startActivity(fb);
+          } catch (Exception e) { e.printStackTrace(); }
+      }
   }
   

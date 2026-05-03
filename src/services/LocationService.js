@@ -44,7 +44,7 @@ const DEFAULT_CONFIG = {
   forceTrackingServiceEnabled: true,  // الحل #5
   watchdogEnabled: true,              // الحل #9
   watchdogCheckIntervalSec: 60,
-  watchdogMaxDeadTimeSec: 180,
+  watchdogMaxDeadTimeSec: 90,         // v2.7.15: 180 → 90 (يلاحظ التجمد أسرع 2x)
   autoRestartOnDestroy: true,
 
   // ===== TAB E: HEALTH (8 settings) =====
