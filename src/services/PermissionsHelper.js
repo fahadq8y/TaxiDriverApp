@@ -162,16 +162,14 @@
     }
   }
 
-  // ===== v2.7.15: HONOR-only requests =====
+  // ===== v2.7.19: HONOR-only requests =====
+  // إصلاح حرج: شيلنا setTimeout(30s) الكاذب — كان يكتب 'true' بدون تأكيد فعلي
+  // الآن: فقط نفتح الإعدادات. التأكيد يجي من المستخدم عبر confirmHonorPermission
+  // (في PermissionGate.js: زر "أنا فعّلتها يدوياً" أو dialog "هل قمت بتفعيل الإعداد؟")
   export async function requestPermission7_HonorProtected() {
     try {
       if (BatteryOptimization?.openHonorProtectedApps) {
         BatteryOptimization.openHonorProtectedApps();
-        // بعد ما يرجع للتطبيق, نفترض أنه فعّلها
-        const AsyncStorage = require('@react-native-async-storage/async-storage').default;
-        setTimeout(async () => {
-          await AsyncStorage.setItem('honor_p7_confirmed', 'true');
-        }, 30000); // بعد 30 ثانية من فتح الإعدادات
       } else { Linking.openSettings(); }
     } catch (e) { Linking.openSettings(); }
   }
@@ -179,10 +177,6 @@
     try {
       if (BatteryOptimization?.openHonorAutoLaunch) {
         BatteryOptimization.openHonorAutoLaunch();
-        const AsyncStorage = require('@react-native-async-storage/async-storage').default;
-        setTimeout(async () => {
-          await AsyncStorage.setItem('honor_p8_confirmed', 'true');
-        }, 30000);
       } else { Linking.openSettings(); }
     } catch (e) { Linking.openSettings(); }
   }
@@ -190,10 +184,6 @@
     try {
       if (BatteryOptimization?.openHonorPowerIntensive) {
         BatteryOptimization.openHonorPowerIntensive();
-        const AsyncStorage = require('@react-native-async-storage/async-storage').default;
-        setTimeout(async () => {
-          await AsyncStorage.setItem('honor_p9_confirmed', 'true');
-        }, 30000);
       } else { Linking.openSettings(); }
     } catch (e) { Linking.openSettings(); }
   }
