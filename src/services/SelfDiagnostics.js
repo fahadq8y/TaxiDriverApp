@@ -343,6 +343,70 @@ class SelfDiagnostics {
         return { reloading: true };
       }
 
+      case 'run_full_diagnostic': {
+        // v2.7.19: تشخيص شامل يحفظ تقرير في driverDiagnostics/{id}/diagnosticReports/{ts}
+        try {
+          const { checkAllPermissions, isHonorOrHuawei } = require('./PermissionsHelper');
+          const { analyzeRecentKills, getPermissionConfidence } = require('./ExitReasonsHelper');
+          const firestore = require('@react-native-firebase/firestore').default;
+
+          const driverId = await AsyncStorage.getItem('employeeNumber');
+          if (!driverId) return { error: 'no_driver_id' };
+
+          const perms = await checkAllPermissions();
+          const exitAnalysis = await analyzeRecentKills(24 * 60 * 60 * 1000);
+          const lastLocStr = await AsyncStorage.getItem('last_location_received_at');
+          const lastLocAgeMin = lastLocStr ? Math.round((Date.now() - parseInt(lastLocStr)) / 60000) : 999;
+
+          let confidences = null;
+          if (perms.isHonor) {
+            const [c7, c8, c9] = await Promise.all([
+              getPermissionConfidence('honor_p7_confirmed', { lastLocAgeMin }),
+              getPermissionConfidence('honor_p8_confirmed', { lastLocAgeMin }),
+              getPermissionConfidence('honor_p9_confirmed', { lastLocAgeMin }),
+            ]);
+            confidences = { p7: c7, p8: c8, p9: c9 };
+          }
+
+          // اختبار wakelock
+          let wakelockOk = false;
+          try {
+            if (NativeModules.BatteryOptimization?.cycleHonorWakelock) {
+              await NativeModules.BatteryOptimization.cycleHonorWakelock();
+              wakelockOk = true;
+            }
+          } catch (_) {}
+
+          // اختبار queue
+          let queueCount = 0;
+          try {
+            const BG = require('react-native-background-geolocation').default;
+            queueCount = await BG.getCount();
+          } catch (_) {}
+
+          const report = {
+            ts: Date.now(),
+            triggeredBy: 'admin',
+            permissions: perms,
+            confidences,
+            exitAnalysis,
+            wakelockOk,
+            queueCount,
+            lastLocAgeMin,
+            appVersion: require('../../package.json').version,
+          };
+
+          await firestore()
+            .collection('driverDiagnostics').doc(driverId)
+            .collection('diagnosticReports').doc(String(report.ts))
+            .set(report);
+
+          return { success: true, reportId: report.ts };
+        } catch (e) {
+          return { error: e.message };
+        }
+      }
+
       default:
         return { unsupported: cmd.type };
     }
