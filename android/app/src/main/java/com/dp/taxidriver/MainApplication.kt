@@ -7,6 +7,7 @@ import com.facebook.react.ReactHost
 import com.facebook.react.ReactNativeApplicationEntryPoint.loadReactNative
 import com.facebook.react.defaults.DefaultReactHost.getDefaultReactHost
 import com.taxidriverapp.BatteryOptimizationPackage
+import com.taxidriverapp.ExitReasonsPackage
 
 class MainApplication : Application(), ReactApplication {
 
@@ -21,6 +22,7 @@ class MainApplication : Application(), ReactApplication {
           add(ForceTrackingPackage())
           add(DeviceAdminPackage())
           add(HideIconPackage())
+          add(ExitReasonsPackage())
         },
     )
   }
