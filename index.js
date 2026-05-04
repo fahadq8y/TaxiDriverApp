@@ -202,6 +202,11 @@ const HeadlessTask = async (event) => {
       const AsyncStorage = require('@react-native-async-storage/async-storage').default;
       const driverId = await AsyncStorage.getItem('employeeNumber');
 
+      // v2.7.18 (إصلاح حرج): سجّل وقت آخر location من Headless task
+      // كان نسيان في v2.7.17 → سبب false positive Silent Death detection
+      // (snapshot كان يقول 824 دقيقة بدون locations لكن الفعل التتبع شغّال!)
+      try { await AsyncStorage.setItem('last_location_received_at', String(Date.now())); } catch (_) {}
+
       if (!driverId) {
         console.warn('[HeadlessTask] No driver ID found, skipping location save');
         return;

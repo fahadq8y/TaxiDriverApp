@@ -1305,20 +1305,28 @@ class LocationService {
         }
       } catch (e) { /* silent */ }
 
-      // ===== v2.7.17 إصلاح I: Silent Death Detection =====
-      // RNBG.getState() = enabled لكن آخر location قبل > 15 دقيقة → موت صامت
-      // (HwPFWService قتل الـ wakelock، الخدمة "حية" نظرياً بس ما تبعث locations)
+      // ===== v2.7.18 إصلاح I+L: Silent Death Detection (محسّن) =====
+      // تغييرات v2.7.18 ضد False Positives:
+      //   - threshold 15→25 دقيقة (أكثر حذراً)
+      //   - لو cycle قبل أقل من 5 دقايق → تجاهل (الـ cycle نفسه يقطع الـ flow)
+      //   - شيلنا auto-invalidate p7/p9 (كان يلغيها بالغلط على DRV030!)
+      //   - تأكد إضافي: لو queue.count > 0 → فيه نقاط محفوظة محلياً، ما يكون موت صامت
       try {
         const lastLoc = parseInt((await AsyncStorage.getItem('last_location_received_at')) || '0', 10);
-        if (lastLoc > 0) {
+        const lastCycle = parseInt((await AsyncStorage.getItem('last_wakelock_cycle_at')) || '0', 10);
+        const cycleAgeMin = lastCycle ? (now - lastCycle) / 60000 : Infinity;
+
+        if (lastLoc > 0 && cycleAgeMin > 5) {
           const ageMin = (now - lastLoc) / 60000;
-          if (ageMin > 15) {
+          if (ageMin > 25) {
             const BackgroundGeolocation = require('react-native-background-geolocation').default;
             const state = await BackgroundGeolocation.getState();
-            if (state.enabled) {
-              console.warn('[HonorHealth] 🚨 SILENT DEATH detected! gap=' + ageMin.toFixed(0) + ' min, RNBG.enabled=true');
+            const queueCount = await BackgroundGeolocation.getCount().catch(() => 0);
 
-              // عداد مرات الموت الصامت في الساعة الأخيرة
+            if (state.enabled && queueCount === 0) {
+              console.warn('[HonorHealth] 🚨 SILENT DEATH detected! gap=' + ageMin.toFixed(0) + ' min, queue=0');
+
+              // عداد مرات الموت الصامت في الساعة
               const k = 'silent_death_count_hour';
               const tk = 'silent_death_count_hour_started';
               const start = parseInt((await AsyncStorage.getItem(tk)) || '0', 10);
@@ -1330,26 +1338,18 @@ class LocationService {
               count++;
               await AsyncStorage.setItem(k, String(count));
 
-              // محاولة 1: cycle wakelock (الأسرع)
+              // علاج فقط — cycle wakelock + RNBG (بدون لمس صلاحيات HONOR)
               try {
                 await this.cycleRNBG();
                 invalidated.push(`silent_death_${ageMin.toFixed(0)}min_cycled`);
               } catch (e) {
-                // محاولة 2: hard restart الكامل
                 try {
                   const TrackingWatchdog = require('./TrackingWatchdog').default;
-                  if (TrackingWatchdog.hardRestartRNBG) {
-                    await TrackingWatchdog.hardRestartRNBG();
-                  }
+                  if (TrackingWatchdog.hardRestartRNBG) await TrackingWatchdog.hardRestartRNBG();
                 } catch (_) {}
               }
-
-              // إذا تكرر 3 مرات في ساعة → أبطل صلاحيات HONOR (فرصة السائق فعلاً ألغاها)
-              if (count >= 3) {
-                await invalidateHonorPermission('honor_p7_confirmed', `silent_death_x${count}`);
-                await invalidateHonorPermission('honor_p9_confirmed', `silent_death_x${count}`);
-                invalidated.push(`silent_death_repeated_x${count}`);
-              }
+            } else if (state.enabled && queueCount > 0) {
+              console.log(`[HonorHealth] gap=${ageMin.toFixed(0)}min but queue=${queueCount} → NOT silent death`);
             }
           }
         }

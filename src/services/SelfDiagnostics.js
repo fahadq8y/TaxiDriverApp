@@ -84,16 +84,22 @@ class SelfDiagnostics {
       platformVersion: String(Platform.Version),
     };
 
-    // Device info
+    // Device info — v2.7.18: safe-await wrapper (DeviceInfo getters may be sync OR async)
+    const safeAwait = async (fn) => {
+      try {
+        const v = fn();
+        return v && typeof v.then === 'function' ? await v : v;
+      } catch (e) { return null; }
+    };
     try {
       snap.device = {
-        brand: await DeviceInfo.getBrand(),
-        manufacturer: await DeviceInfo.getManufacturer(),
-        model: DeviceInfo.getModel(),
-        systemName: DeviceInfo.getSystemName(),
-        systemVersion: DeviceInfo.getSystemVersion(),
-        battery: await DeviceInfo.getBatteryLevel(),
-        isPowerSaveMode: await DeviceInfo.isPowerSaveMode(),
+        brand: await safeAwait(() => DeviceInfo.getBrand()),
+        manufacturer: await safeAwait(() => DeviceInfo.getManufacturer()),
+        model: await safeAwait(() => DeviceInfo.getModel()),
+        systemName: await safeAwait(() => DeviceInfo.getSystemName()),
+        systemVersion: await safeAwait(() => DeviceInfo.getSystemVersion()),
+        battery: await safeAwait(() => DeviceInfo.getBatteryLevel()),
+        isPowerSaveMode: await safeAwait(() => DeviceInfo.isPowerSaveMode()),
       };
     } catch (e) { snap.device = { error: e.message }; }
 
@@ -142,6 +148,40 @@ class SelfDiagnostics {
       const perms = await checkAllPermissions();
       snap.permissions = perms;
     } catch (e) { snap.permissions = { error: e.message }; }
+
+    // v2.7.18 (إصلاح M): اكتشاف الصلاحيات اللي ألغاها النظام
+    // الفكرة: لو AsyncStorage يقول "السائق منح p7" بس الفحص الحقيقي يقول "ملغاة"
+    //        → النظام (HONOR/Samsung Auto-Optimize) ألغاها بدون علم السائق
+    try {
+      const { NativeModules } = require('react-native');
+      const revoked = [];
+      // Battery Optimization فحص حقيقي
+      try {
+        const isIgnoring = await NativeModules.BatteryOptimization?.isIgnoringBatteryOptimizations();
+        const userSaidYes = (await AsyncStorage.getItem('honor_p1_confirmed')) === 'true'
+                         || (await AsyncStorage.getItem('battery_optimization_granted')) === 'true';
+        if (userSaidYes && isIgnoring === false) revoked.push('battery_optimization');
+      } catch (_) {}
+      // p7/p8/p9 — لو منحها سابقاً واُلغيت بشكل غير طبيعي
+      const p7Was = await AsyncStorage.getItem('honor_p7_confirmed_invalidated_reason');
+      const p9Was = await AsyncStorage.getItem('honor_p9_confirmed_invalidated_reason');
+      if (p7Was) revoked.push(`honor_p7 (${p7Was})`);
+      if (p9Was) revoked.push(`honor_p9 (${p9Was})`);
+
+      snap.permsRevoked = revoked;
+      snap.needsRePermit = revoked.length > 0;
+
+      // اكتب alert في drivers doc لتظهر للوحة الإدارة
+      if (revoked.length > 0) {
+        try {
+          await firestore().collection('drivers').doc(this.driverId).set({
+            permsRevoked: revoked,
+            permsRevokedAt: firestore.FieldValue.serverTimestamp(),
+            needsRePermit: true,
+          }, { merge: true });
+        } catch (_) {}
+      }
+    } catch (e) {}
 
     // HONOR-specific stats
     try {
