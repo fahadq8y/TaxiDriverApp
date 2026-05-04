@@ -1,5 +1,5 @@
 /**
- * PermissionGate.js — v2.7.16 (إصلاح C + H)
+ * PermissionGate.js — v2.7.19 (5 ضغطات → DiagnosticsScreen + زر "أنا فعّلتها يدوياً")
  * 6 صلاحيات أساسية + 3 صلاحيات HONOR conditional + Smart Detection
  */
 
@@ -22,6 +22,7 @@
     confirmHonorPermission,
     getHonorInvalidationReason,
   } from '../services/PermissionsHelper';
+  import DiagnosticsScreen from './DiagnosticsScreen';
 
   const POLL_INTERVAL_MS = 2000;
 
@@ -32,8 +33,22 @@
     });
     const [reasons, setReasons] = useState({}); // v2.7.16: invalidation reasons
     const [loading, setLoading] = useState(true);
+    const [showDiagnostics, setShowDiagnostics] = useState(false); // v2.7.19: شاشة المراقب
+    const tapCountRef = useRef(0);
+    const tapTimerRef = useRef(null);
     const intervalRef = useRef(null);
     const appStateRef = useRef(AppState.currentState);
+
+    // v2.7.19: ٥ ضغطات على العنوان → DiagnosticsScreen (للمراقب فقط)
+    const handleTitleTap = useCallback(() => {
+      tapCountRef.current += 1;
+      if (tapTimerRef.current) clearTimeout(tapTimerRef.current);
+      tapTimerRef.current = setTimeout(() => { tapCountRef.current = 0; }, 3000);
+      if (tapCountRef.current >= 5) {
+        tapCountRef.current = 0;
+        setShowDiagnostics(true);
+      }
+    }, []);
 
     const refresh = useCallback(async () => {
       const result = await checkAllPermissions();
@@ -84,6 +99,11 @@
       });
       return () => sub.remove();
     }, [state.allGranted]);
+
+    // v2.7.19: شاشة التشخيص للمراقب
+    if (showDiagnostics) {
+      return <DiagnosticsScreen onClose={() => { setShowDiagnostics(false); refresh(); }} />;
+    }
 
     if (state.allGranted) return children;
 
@@ -139,7 +159,9 @@
     return (
       <ScrollView contentContainerStyle={styles.scroll}>
         <View style={styles.container}>
-          <Text style={styles.title}>لتشغيل التطبيق</Text>
+          <TouchableOpacity activeOpacity={1} onPress={handleTitleTap}>
+            <Text style={styles.title}>لتشغيل التطبيق</Text>
+          </TouchableOpacity>
           <Text style={styles.subtitle}>فعّل الصلاحيات التالية:</Text>
 
           {autoDetected && (
@@ -175,6 +197,26 @@
                     🔍 اكتشف التطبيق إنها انغلقت — يحتاج تفعيلها مرة ثانية
                   </Text>
                 )}
+                {/* v2.7.19: زر "أنا فعّلتها يدوياً" لصلاحيات HONOR فقط */}
+                {!item.granted && ['p7','p8','p9'].includes(item.key) && (
+                  <TouchableOpacity
+                    style={styles.manualConfirmBtn}
+                    onPress={async () => {
+                      const key = item.key === 'p7' ? 'honor_p7_confirmed'
+                                : item.key === 'p8' ? 'honor_p8_confirmed'
+                                : 'honor_p9_confirmed';
+                      Alert.alert('تأكيد', 'هل أنت متأكد إنك فعّلت هذي الصلاحية في إعدادات الجهاز؟', [
+                        { text: 'لا', style: 'cancel' },
+                        { text: 'نعم', onPress: async () => {
+                          await confirmHonorPermission(key);
+                          refresh();
+                        }},
+                      ]);
+                    }}
+                  >
+                    <Text style={styles.manualConfirmText}>✓ أنا فعّلتها يدوياً</Text>
+                  </TouchableOpacity>
+                )}
               </View>
             ))}
           </View>
@@ -206,4 +248,12 @@
     doneText: { color: '#2e7d32', fontSize: 15, fontWeight: 'bold' },
     reasonText: { fontSize: 12, color: '#d32f2f', textAlign: 'right',
       paddingHorizontal: 12, paddingBottom: 8, fontStyle: 'italic' },
+    manualConfirmBtn: {
+      marginHorizontal: 12, marginBottom: 8, paddingVertical: 8,
+      backgroundColor: '#e8f5e9', borderRadius: 6,
+      borderWidth: 1, borderColor: '#a5d6a7',
+    },
+    manualConfirmText: {
+      textAlign: 'center', color: '#2e7d32', fontSize: 13, fontWeight: '600',
+    },
   });
