@@ -1296,12 +1296,53 @@ class LocationService {
         }
       } catch (e) { /* silent */ }
 
-      // ===== 2) فحص p7 (Protected Apps) — restart count =====
+      // ===== 2) فحص p7 (Protected Apps) — v2.7.20 (الحل #1: المفتش الأذكى) =====
+      // قبل: كان يلغي p7 لو restart count > 5 (يسبب false positives كثيرة)
+      // بعد: نتحقق من السلوك الحقيقي — لو التطبيق 'حي' فعلاً، لا نلغي
+      // العتبة: > 15 (بدل 5) + يجب أن تكون كل المؤشرات الإيجابية فاشلة
       try {
         const count = parseInt((await AsyncStorage.getItem('honor_restart_count_hour')) || '0', 10);
-        if (count > 5) {
-          const wasInvalidated = await invalidateHonorPermission('honor_p7_confirmed', `restarts_${count}_in_hour`);
-          if (wasInvalidated) invalidated.push('p7 (Protected Apps)');
+        if (count > 15) {
+          let isHealthy = false;
+          const healthSignals = [];
+
+          // إشارة 1: آخر نقطة موقع حديثة (< 10 دقايق)
+          try {
+            const lastLoc = parseInt((await AsyncStorage.getItem('last_location_received_at')) || '0', 10);
+            const lastLocAgeMin = lastLoc ? (now - lastLoc) / 60000 : 9999;
+            if (lastLocAgeMin < 10) {
+              isHealthy = true;
+              healthSignals.push('recent_loc_' + lastLocAgeMin.toFixed(0) + 'min');
+            }
+          } catch (_) {}
+
+          // إشارة 2: queue صحي (< 50 نقطة)
+          try {
+            const BackgroundGeolocation = require('react-native-background-geolocation').default;
+            const queueCount = await BackgroundGeolocation.getCount().catch(() => 0);
+            if (queueCount < 50) {
+              healthSignals.push('queue_ok_' + queueCount);
+              if (queueCount < 20) isHealthy = true;
+            }
+          } catch (_) {}
+
+          // إشارة 3: ما في silent death مؤكّد في آخر ساعة
+          try {
+            const sdCount = parseInt((await AsyncStorage.getItem('silent_death_count_hour')) || '0', 10);
+            if (sdCount === 0) {
+              healthSignals.push('no_silent_death');
+            } else {
+              isHealthy = false;
+              healthSignals.push('silent_death_' + sdCount);
+            }
+          } catch (_) {}
+
+          if (isHealthy) {
+            console.log('[HonorHealth] SKIP invalidate p7 - count=' + count + ' but app is healthy: ' + healthSignals.join(', '));
+          } else {
+            const wasInvalidated = await invalidateHonorPermission('honor_p7_confirmed', 'restarts_' + count + '_unhealthy_' + healthSignals.join('|'));
+            if (wasInvalidated) invalidated.push('p7 (Protected Apps)');
+          }
         }
       } catch (e) { /* silent */ }
 
