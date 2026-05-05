@@ -224,6 +224,11 @@
       // v2.7.16: امسح أي علامة invalidation سابقة
       await AsyncStorage.removeItem(key + '_invalidated_reason');
       await AsyncStorage.removeItem(key + '_invalidated_at');
+      // v2.7.20 (الحل #2): احترام كلام السائق لمدة 24 ساعة
+      // لما السائق يضغط 'أنا فعّلتها يدوياً'، invalidateHonorPermission تحترم هذا
+      // ولا تلغي بسبب counters/heuristics — فقط silent_death الفعلي يلغيها
+      await AsyncStorage.setItem(key + '_user_verified_at', String(Date.now()));
+      console.log('[HonorPerms] User-verified', key, '- grace 24h');
     } catch (e) {}
   }
 
@@ -235,11 +240,26 @@
       const AsyncStorage = require('@react-native-async-storage/async-storage').default;
       const wasConfirmed = (await AsyncStorage.getItem(key)) === 'true';
       if (!wasConfirmed) return false; // ما كانت مفعلة أصلاً
+
+      // v2.7.20 (الحل #2): grace period 24 ساعة بعد ما السائق يأكّد يدوياً
+      // الاستثناء الوحيد: silent_death (دليل قاطع إن التطبيق ميّت فعلاً)
+      const reasonStr = String(reason || 'unknown');
+      const isSilentDeathProof = reasonStr.indexOf('silent_death_') === 0;
+      if (!isSilentDeathProof) {
+        const verifiedAt = parseInt((await AsyncStorage.getItem(key + '_user_verified_at')) || '0', 10);
+        const graceMs = 24 * 60 * 60 * 1000;
+        if (verifiedAt > 0 && (Date.now() - verifiedAt) < graceMs) {
+          const remainHr = ((graceMs - (Date.now() - verifiedAt)) / 3600000).toFixed(1);
+          console.log('[HonorHealth] SKIP invalidate', key, '- user verified, grace=' + remainHr + 'h, reason=' + reasonStr);
+          return false; // احترم تأكيد السائق
+        }
+      }
+
       await AsyncStorage.removeItem(key);
-      await AsyncStorage.setItem(key + '_invalidated_reason', String(reason || 'unknown'));
+      await AsyncStorage.setItem(key + '_invalidated_reason', reasonStr);
       await AsyncStorage.setItem(key + '_invalidated_at', String(Date.now()));
-      console.warn('[HonorHealth] ❌ Invalidated', key, '- reason:', reason);
-      return true; // تم الإلغاء
+      console.warn('[HonorHealth] ❌ Invalidated', key, '- reason:', reasonStr);
+      return true;
     } catch (e) {
       console.warn('[HonorHealth] invalidate failed:', e.message);
       return false;
