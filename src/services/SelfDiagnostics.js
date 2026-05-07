@@ -27,6 +27,8 @@ class SelfDiagnostics {
     this.driverId = null;
     this.snapshotInterval = null;
     this.commandUnsub = null;
+    this.logBuffer = []; // v2.7.21: ring buffer لآخر 200 log
+    this.logCaptureAttached = false;
     this.errorLog = []; // آخر 30 خطأ
     this.started = false;
   }
@@ -72,6 +74,9 @@ class SelfDiagnostics {
 
     // 3) catch global errors
     this.attachErrorHandler();
+
+    // v2.7.21: capture console logs into ring buffer
+    this.attachLogCapture();
 
     console.log('[SelfDiag] 🔬 Self-diagnostics started for', driverId);
   }
@@ -229,8 +234,38 @@ class SelfDiagnostics {
       snap.memoryUsedMB = Math.round(mem / 1024 / 1024);
     } catch (e) {}
 
-    // Recent errors
-    snap.recentErrors = this.errorLog.slice(-20);
+    // v2.7.21: Doze + App Standby + Background Restricted (native)
+      try {
+        const DM = NativeModules.DiagnosticsModule;
+        if (DM && DM.getPowerState) snap.doze = await DM.getPowerState();
+      } catch (e) { snap.doze = { error: e.message }; }
+
+      // v2.7.21: Network info (native)
+      try {
+        const DM = NativeModules.DiagnosticsModule;
+        if (DM && DM.getNetworkInfo) snap.network = await DM.getNetworkInfo();
+      } catch (e) { snap.network = { error: e.message }; }
+
+      // v2.7.21: Memory info (native — أدق من DeviceInfo)
+      try {
+        const DM = NativeModules.DiagnosticsModule;
+        if (DM && DM.getMemoryInfo) snap.memory = await DM.getMemoryInfo();
+      } catch (e) {}
+
+      // v2.7.21: Firestore writes counter
+      try {
+        snap.firestoreStats = {
+          writesHour: parseInt((await AsyncStorage.getItem('firestore_writes_hour')) || '0', 10),
+          writesHourStartedAt: parseInt((await AsyncStorage.getItem('firestore_writes_hour_started')) || '0', 10),
+        };
+      } catch (e) {}
+
+      // v2.7.21: Log ring buffer (آخر 200 log)
+      snap.logs = this.logBuffer.slice(-200);
+      snap.logCount = this.logBuffer.length;
+
+      // Recent errors
+      snap.recentErrors = this.errorLog.slice(-20);
 
     // Computed health verdict
     snap.healthVerdict = this.computeHealthVerdict(snap);
