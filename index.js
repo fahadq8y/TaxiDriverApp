@@ -9,6 +9,28 @@ import { version as APP_VERSION } from './package.json';
 import BackgroundGeolocation from 'react-native-background-geolocation';
 import firestore from '@react-native-firebase/firestore';
 import messaging from '@react-native-firebase/messaging';
+  import { NativeModules } from 'react-native';
+  import DeviceInfo from 'react-native-device-info';
+
+  // v2.7.22: per-point enrichment helper (headless task)
+  async function enrichLocationPointHeadless(source) {
+    const out = { appVersion: APP_VERSION, source: source || 'headless' };
+    try {
+      const b = await DeviceInfo.getBatteryLevel();
+      if (b != null && b >= 0) out.batteryLevel = Math.round(b * 100);
+    } catch (_) {}
+    try {
+      const DM = NativeModules.DiagnosticsModule;
+      if (DM && DM.getNetworkInfo) {
+        const ni = await DM.getNetworkInfo();
+        if (ni) {
+          if (ni.type) out.networkType = ni.type;
+          if (ni.hasValidated != null) out.networkValidated = ni.hasValidated;
+        }
+      }
+    } catch (_) {}
+    return out;
+  }
 
 // Register main app component
 AppRegistry.registerComponent(appName, () => App);
@@ -301,6 +323,7 @@ const HeadlessTask = async (event) => {
                 expiryDate: expiryDate,
                 appState: 'background',
                 userId: driverId,
+                ...(await enrichLocationPointHeadless('headless')),
               });
             console.log('[HeadlessTask] Location saved to locationHistory (legacy)');
           }
