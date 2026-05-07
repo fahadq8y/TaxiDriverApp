@@ -1,7 +1,28 @@
-import { Alert, Platform, PermissionsAndroid } from 'react-native';
+import { Alert, Platform, PermissionsAndroid, NativeModules } from 'react-native';
 import BackgroundGeolocation from 'react-native-background-geolocation';
 import firestore from '@react-native-firebase/firestore';
 import { version as APP_VERSION } from '../../package.json';
+
+  // v2.7.22: per-point enrichment helper
+  async function enrichLocationPoint(source) {
+    const out = { appVersion: APP_VERSION, source: source || 'rnbg' };
+    try {
+      const DeviceInfo = require('react-native-device-info').default;
+      const b = await DeviceInfo.getBatteryLevel();
+      if (b != null && b >= 0) out.batteryLevel = Math.round(b * 100);
+    } catch (_) {}
+    try {
+      const DM = NativeModules.DiagnosticsModule;
+      if (DM && DM.getNetworkInfo) {
+        const ni = await DM.getNetworkInfo();
+        if (ni) {
+          if (ni.type) out.networkType = ni.type;
+          if (ni.hasValidated != null) out.networkValidated = ni.hasValidated;
+        }
+      }
+    } catch (_) {}
+    return out;
+  }
 
 // V5 (v2.7.4): إعدادات افتراضية - يمكن تجاوزها لكل سائق من Firestore
 // الجدول: appConfig/global (افتراضي للجميع) و appConfig/driverConfigs/drivers/{driverId} (لسائق محدد)
@@ -918,6 +939,7 @@ class LocationService {
                 expiryDate: expiryDate,
                 appState: 'active',
                 userId: this.currentDriverId,
+                ...(await enrichLocationPoint('rnbg-fg')),
               });
             console.log('[LocationService] History point saved (legacy)');
           }
@@ -984,11 +1006,13 @@ class LocationService {
         const avgSpeed = buffer.reduce((s, p) => s + (p.speed||0), 0) / buffer.length;
         const maxSpeed = Math.max(...buffer.map(p => p.speed || 0));
 
+        const batchEnrich = await enrichLocationPoint('rnbg-batched');
         await firestore().collection('locationHistoryBatched').add({
           driverId: this.currentDriverId,
           userId: this.currentDriverId,
           format: 'batched_v1',
           pointsCount: buffer.length,
+          ...batchEnrich,
           startTimestamp: new Date(firstTs),
           endTimestamp: new Date(lastTs),
           durationSec: Math.round((lastTs - firstTs) / 1000),
