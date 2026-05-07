@@ -31,7 +31,29 @@ class SelfDiagnostics {
     this.started = false;
   }
 
-  async start(driverId) {
+  // v2.7.21: التقاط console.log/warn/error في ring buffer (max 200)
+    attachLogCapture() {
+      if (this.logCaptureAttached) return;
+      this.logCaptureAttached = true;
+      const self = this;
+      const wrap = (level, orig) => function(...args) {
+        try {
+          const msg = args.map(a => {
+            if (typeof a === 'string') return a;
+            try { return JSON.stringify(a); } catch (_) { return String(a); }
+          }).join(' ').slice(0, 500);
+          self.logBuffer.push({ t: Date.now(), level, msg });
+          if (self.logBuffer.length > 200) self.logBuffer.shift();
+        } catch (_) {}
+        return orig.apply(this, args);
+      };
+      const origLog = console.log, origWarn = console.warn, origError = console.error;
+      console.log = wrap('log', origLog);
+      console.warn = wrap('warn', origWarn);
+      console.error = wrap('error', origError);
+    }
+
+    async start(driverId) {
     if (!driverId) return;
     if (this.started && this.driverId === driverId) return;
 
@@ -343,7 +365,25 @@ class SelfDiagnostics {
         return { reloading: true };
       }
 
-      case 'run_full_diagnostic': {
+      case 'dump_logs': {
+          // v2.7.21: يرجع كل الـ logs المخزنة فوراً
+          return {
+            logs: this.logBuffer.slice(),
+            count: this.logBuffer.length,
+            dumpedAt: Date.now(),
+          };
+        }
+
+        case 'open_power_manager': {
+          // v2.7.21: يفتح صفحة Protected Apps المخصصة لـ OEM
+          const DM = NativeModules.DiagnosticsModule;
+          if (!DM || !DM.openPowerManager) return { error: 'native_module_unavailable' };
+          const brand = (await DeviceInfo.getBrand()) || 'unknown';
+          const r = await DM.openPowerManager(brand);
+          return r;
+        }
+
+        case 'run_full_diagnostic': {
         // v2.7.19: تشخيص شامل يحفظ تقرير في driverDiagnostics/{id}/diagnosticReports/{ts}
         try {
           const { checkAllPermissions, isHonorOrHuawei } = require('./PermissionsHelper');
