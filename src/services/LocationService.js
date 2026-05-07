@@ -106,6 +106,48 @@ const PROFILES = {
   battery_saver: { distanceFilter: 25, locationUpdateInterval: 10000, saveDistanceMeters: 50, saveIntervalMs: 120000 },
 };
 
+// v2.7.23: عداد ساعي مع reset تلقائي + سبب آخر رفض
+async function _incHourlyCounter(key) {
+  try {
+    const AsyncStorage = require('@react-native-async-storage/async-storage').default;
+    const now = Date.now();
+    const startedAt = parseInt((await AsyncStorage.getItem('counters_hour_started_at')) || '0', 10);
+    if (!startedAt || (now - startedAt) > 3600000) {
+      // reset كل counters_*_hour
+      const allKeys = await AsyncStorage.getAllKeys();
+      const hourly = allKeys.filter(k => k.endsWith('_hour') && k !== 'counters_hour_started_at');
+      await AsyncStorage.multiRemove(hourly);
+      await AsyncStorage.setItem('counters_hour_started_at', String(now));
+    }
+    const cur = parseInt((await AsyncStorage.getItem(key)) || '0', 10);
+    await AsyncStorage.setItem(key, String(cur + 1));
+  } catch (_) {}
+}
+
+async function _recordHistoryWriteError(driverId, source, err) {
+  try {
+    const AsyncStorage = require('@react-native-async-storage/async-storage').default;
+    const payload = {
+      at: Date.now(),
+      source: source,
+      message: (err && err.message) ? String(err.message).slice(0, 300) : String(err).slice(0, 300),
+      code: (err && err.code) ? String(err.code) : null,
+      name: (err && err.name) ? String(err.name) : null,
+    };
+    await AsyncStorage.setItem('last_history_write_error', JSON.stringify(payload));
+    await _incHourlyCounter('points_write_error_hour');
+    // اكتب في driverHealth/{id}.lastWriteError ليشوفه الإدارة فوراً
+    if (driverId) {
+      try {
+        await firestore().collection('driverHealth').doc(driverId).set({
+          lastWriteError: payload,
+          lastWriteErrorAt: firestore.FieldValue.serverTimestamp(),
+        }, { merge: true });
+      } catch (_) {}
+    }
+  } catch (_) {}
+}
+
 class LocationService {
   constructor() {
     this.isConfigured = false;
@@ -115,6 +157,7 @@ class LocationService {
     this.lastHistorySaveLocation = null;
     this.config = { ...DEFAULT_CONFIG };  // V5: قابل للتجاوز per-driver
     this.configListenerUnsubs = []; // v2.7.4: array للـ global+driver listeners
+    this._lastRejectReason = null; // v2.7.23: آخر سبب رفض من shouldSaveToHistory
   }
 
   // V5: قراءة config من Firestore (global + driver-specific)
@@ -742,12 +785,14 @@ class LocationService {
     const dedupKey = `${currentLat.toFixed(5)},${currentLng.toFixed(5)}`;
     if (this._lastDedupKey === dedupKey && this._lastDedupTime && (now - this._lastDedupTime) < 2000) {
       console.log('[shouldSaveToHistory] ⛔ Identical coords within 2sec — strict dedup skip');
+      this._lastRejectReason = 'strict_dedup_2sec';
       return false;
     }
 
     // أول نقطة دائماً تحفظ
     if (!this.lastHistorySaveTime || !this.lastHistorySaveLocation) {
       this.lastIsMoving = isMoving;
+      this._lastRejectReason = null;
       return true;
     }
     
@@ -762,6 +807,7 @@ class LocationService {
     );
     if (distFromLast < 5 && timeDiff < 5000) {
       console.log('[shouldSaveToHistory] Duplicate point - skipping');
+      this._lastRejectReason = 'duplicate_5m_5sec';
       return false;
     }
     
@@ -769,6 +815,7 @@ class LocationService {
     if (wasMoving !== isMoving) {
       console.log(`[shouldSaveToHistory] State change: moving=${wasMoving}→${isMoving} - saving transition`);
       this.lastIsMoving = isMoving;
+      this._lastRejectReason = null;
       return true;
     }
     
@@ -778,8 +825,10 @@ class LocationService {
       const stillBackup = this.config.stillBackupIntervalMs || 1800000;
       if (timeDiff >= stillBackup) {
         console.log(`[shouldSaveToHistory] Stopped > ${stillBackup/60000}min - backup point`);
+        this._lastRejectReason = null;
         return true;
       }
+      this._lastRejectReason = 'still_within_backup_interval';
       return false;
     }
     
@@ -788,14 +837,17 @@ class LocationService {
     const saveDist = this.config.saveDistanceMeters || 20;
     if (timeDiff >= saveInterval) {
       console.log(`[shouldSaveToHistory] Moving - ${saveInterval/1000}s elapsed`);
+      this._lastRejectReason = null;
       return true;
     }
     
     if (distFromLast >= saveDist) {
       console.log(`[shouldSaveToHistory] Moving - ${Math.round(distFromLast)}m (>= ${saveDist}م)`);
+      this._lastRejectReason = null;
       return true;
     }
     
+    this._lastRejectReason = 'moving_below_threshold';
     return false;
   }
   
@@ -823,6 +875,8 @@ class LocationService {
         const AsyncStorage = require('@react-native-async-storage/async-storage').default;
         await AsyncStorage.setItem('last_location_received_at', String(Date.now()));
       } catch (_) {}
+      // v2.7.23: عدّ كل نقطة مستلمة من RNBG (مهم للتشخيص)
+      _incHourlyCounter('points_received_hour').catch(()=>{});
 
       let speed = location.coords.speed ?? 0;
       const accuracy = location.coords.accuracy ?? 999;
@@ -952,9 +1006,24 @@ class LocationService {
           // v2.7.11 FIX #3: تخزين بصمة آخر نقطة محفوظة (للـ strict dedup)
           this._lastDedupKey = `${location.coords.latitude.toFixed(5)},${location.coords.longitude.toFixed(5)}`;
           this._lastDedupTime = this.lastHistorySaveTime;
+          // v2.7.23: عداد + timestamp ينقروا من SelfDiagnostics
+          try {
+            const AsyncStorage = require('@react-native-async-storage/async-storage').default;
+            await AsyncStorage.setItem('last_history_save_at', String(this.lastHistorySaveTime));
+            // امسح آخر خطأ — فيه نجاح الحين
+            await AsyncStorage.removeItem('last_history_write_error');
+          } catch (_) {}
+          _incHourlyCounter('points_saved_hour').catch(()=>{});
         } catch (historyError) {
           console.error('[LocationService] Error saving to history:', historyError);
+          // v2.7.23: سجّل الخطأ في AsyncStorage + driverHealth (بدل ما يضيع في logcat)
+          _recordHistoryWriteError(this.currentDriverId, 'rnbg-fg', historyError).catch(()=>{});
         }
+      } else {
+        // v2.7.23: عدّ سبب الرفض (مهم لكشف الفلتر المتشدد)
+        const reason = this._lastRejectReason || 'unknown';
+        _incHourlyCounter('points_rejected_' + reason + '_hour').catch(()=>{});
+        _incHourlyCounter('points_rejected_total_hour').catch(()=>{});
       }
     } catch (error) {
       console.error('[LocationService] Error saving location:', error);

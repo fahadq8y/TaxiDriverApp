@@ -260,6 +260,55 @@ class SelfDiagnostics {
         };
       } catch (e) {}
 
+      // v2.7.23: تشخيص locationHistory الدقيق - الإجابة على "ليش ما تنحفظ نقاط؟"
+      try {
+        const lastSave = parseInt((await AsyncStorage.getItem('last_history_save_at')) || '0', 10);
+        const lastReceived = parseInt((await AsyncStorage.getItem('last_location_received_at')) || '0', 10);
+        const countersStartedAt = parseInt((await AsyncStorage.getItem('counters_hour_started_at')) || '0', 10);
+
+        const received = parseInt((await AsyncStorage.getItem('points_received_hour')) || '0', 10);
+        const saved = parseInt((await AsyncStorage.getItem('points_saved_hour')) || '0', 10);
+        const writeErrors = parseInt((await AsyncStorage.getItem('points_write_error_hour')) || '0', 10);
+        const rejTotal = parseInt((await AsyncStorage.getItem('points_rejected_total_hour')) || '0', 10);
+        const rejStrictDedup = parseInt((await AsyncStorage.getItem('points_rejected_strict_dedup_2sec_hour')) || '0', 10);
+        const rejDup5m5s = parseInt((await AsyncStorage.getItem('points_rejected_duplicate_5m_5sec_hour')) || '0', 10);
+        const rejStill = parseInt((await AsyncStorage.getItem('points_rejected_still_within_backup_interval_hour')) || '0', 10);
+        const rejMoving = parseInt((await AsyncStorage.getItem('points_rejected_moving_below_threshold_hour')) || '0', 10);
+
+        let lastWriteError = null;
+        try {
+          const raw = await AsyncStorage.getItem('last_history_write_error');
+          if (raw) lastWriteError = JSON.parse(raw);
+        } catch (_) {}
+
+        snap.historyTracking = {
+          lastHistorySaveAt: lastSave || null,
+          lastHistorySaveAgeMin: lastSave ? Math.floor((now - lastSave) / 60000) : null,
+          lastLocationReceivedAt: lastReceived || null,
+          lastLocationReceivedAgeMin: lastReceived ? Math.floor((now - lastReceived) / 60000) : null,
+          // فرق الوقت بين آخر استلام وآخر حفظ - مفتاح كشف silent drop
+          gapMin: (lastSave && lastReceived) ? Math.floor((lastReceived - lastSave) / 60000) : null,
+          countersStartedAt: countersStartedAt || null,
+          countersAgeMin: countersStartedAt ? Math.floor((now - countersStartedAt) / 60000) : null,
+          pointsReceivedHour: received,
+          pointsSavedHour: saved,
+          pointsWriteErrorHour: writeErrors,
+          pointsRejectedTotalHour: rejTotal,
+          // نسبة الحفظ - أهم رقم
+          saveRatePercent: received > 0 ? Math.round((saved / received) * 100) : null,
+          rejectionBreakdown: {
+            strict_dedup_2sec: rejStrictDedup,
+            duplicate_5m_5sec: rejDup5m5s,
+            still_within_backup_interval: rejStill,
+            moving_below_threshold: rejMoving,
+          },
+          lastWriteError: lastWriteError,
+        };
+
+        // التحليل الذكي - شنو السبب المرجّح؟
+        snap.historyDiagnosis = this.diagnoseHistoryDrop(snap.historyTracking, snap);
+      } catch (e) { snap.historyTracking = { error: e.message }; }
+
       // v2.7.21: Log ring buffer (آخر 200 log)
       snap.logs = this.logBuffer.slice(-200);
       snap.logCount = this.logBuffer.length;
@@ -271,6 +320,127 @@ class SelfDiagnostics {
     snap.healthVerdict = this.computeHealthVerdict(snap);
 
     return snap;
+  }
+
+  // v2.7.23: تحليل ذكي - يحدد سبب توقف locationHistory باحتمالات
+  diagnoseHistoryDrop(ht, snap) {
+    const out = { severity: 'ok', primaryCause: null, possibleCauses: [], recommendations: [] };
+    if (!ht || ht.error) return out;
+
+    const histAge = ht.lastHistorySaveAgeMin;
+    const locAge = ht.lastLocationReceivedAgeMin;
+    const received = ht.pointsReceivedHour || 0;
+    const saved = ht.pointsSavedHour || 0;
+    const writeErrors = ht.pointsWriteErrorHour || 0;
+    const rej = ht.rejectionBreakdown || {};
+    const rejTotal = ht.pointsRejectedTotalHour || 0;
+
+    // الحالة المثالية
+    if (histAge != null && histAge < 10 && saved > 0) {
+      out.severity = 'ok';
+      out.primaryCause = 'tracking_healthy';
+      return out;
+    }
+
+    // 🚨 SILENT DROP: النظام يرسل locations لكن ما تنحفظ في السحابة
+    if (locAge != null && locAge < 5 && histAge != null && histAge > 10) {
+      out.severity = 'critical';
+
+      if (writeErrors > 0 && ht.lastWriteError) {
+        // السبب الأكيد: الكتابة تفشل
+        out.primaryCause = 'firestore_write_failing';
+        out.possibleCauses.push({
+          cause: 'firestore_write_failing',
+          confidence: 95,
+          evidence: `${writeErrors} خطأ كتابة في الساعة. آخر خطأ: ${ht.lastWriteError.code || ht.lastWriteError.name || 'unknown'} — "${ht.lastWriteError.message}"`,
+        });
+        if (ht.lastWriteError.code === 'firestore/permission-denied') {
+          out.recommendations.push('فحص firestore.rules — ربما يحتاج auth أو حقل ناقص');
+        } else if (ht.lastWriteError.code === 'firestore/unavailable' || /network|offline/i.test(ht.lastWriteError.message || '')) {
+          out.recommendations.push('الإنترنت متذبذب — فحص الـ network reliability');
+        } else {
+          out.recommendations.push('فحص رسالة الخطأ في driverHealth/' + (this.driverId || 'X') + '.lastWriteError');
+        }
+        return out;
+      }
+
+      if (received > 0 && saved === 0 && rejTotal === received) {
+        // كل النقاط مرفوضة — الفلتر متشدد جداً
+        out.primaryCause = 'filter_rejecting_all';
+        // أيش أكثر سبب رفض؟
+        const top = Object.entries(rej).sort((a,b) => b[1]-a[1])[0];
+        if (top && top[1] > 0) {
+          out.possibleCauses.push({
+            cause: 'filter_too_strict_' + top[0],
+            confidence: 90,
+            evidence: `${top[1]} نقطة من ${received} مرفوضة بسبب: ${top[0]}`,
+          });
+          if (top[0] === 'still_within_backup_interval') {
+            out.recommendations.push('السائق متوقف فعلاً — قلل stillBackupIntervalMs (الحالي ' + ((snap.firestoreStats && snap.config?.stillBackupIntervalMs) || '?') + 'ms)');
+          } else if (top[0] === 'duplicate_5m_5sec' || top[0] === 'strict_dedup_2sec') {
+            out.recommendations.push('السائق ثابت بنفس النقطة — هذا طبيعي إذا واقف');
+          } else if (top[0] === 'moving_below_threshold') {
+            out.recommendations.push('السائق يتحرك ببطء — قلل saveDistanceMeters أو saveIntervalMs');
+          }
+        }
+        return out;
+      }
+
+      if (received === 0) {
+        out.primaryCause = 'no_locations_received';
+        out.possibleCauses.push({
+          cause: 'rnbg_not_emitting',
+          confidence: 85,
+          evidence: `الـ counters شغّالة ${ht.countersAgeMin}د لكن ولا نقطة وصلت من RNBG. آخر استلام قبل ${locAge}د.`,
+        });
+        if (snap?.doze?.dozeMode === true || snap?.doze?.appStandbyBucket === 'rare' || snap?.doze?.appStandbyBucket === 'restricted') {
+          out.possibleCauses.push({ cause: 'doze_or_standby', confidence: 80, evidence: 'النظام في Doze أو App Standby restricted' });
+          out.recommendations.push('افتح Power Manager وضع التطبيق في "غير مقيّد"');
+        }
+        if (snap?.permsRevoked && snap.permsRevoked.length > 0) {
+          out.possibleCauses.push({ cause: 'perms_revoked', confidence: 95, evidence: 'الصلاحيات ملغاة: ' + snap.permsRevoked.join(', ') });
+          out.recommendations.push('السائق يحتاج يعيد منح الصلاحيات');
+        }
+        if (snap?.honorStats?.restartCountHour >= 4) {
+          out.possibleCauses.push({ cause: 'honor_killing_app', confidence: 85, evidence: `HONOR أعاد التطبيق ${snap.honorStats.restartCountHour} مرات في الساعة` });
+          out.recommendations.push('فعّل Protected App + Auto-launch + Background Activity في إعدادات HONOR');
+        }
+        return out;
+      }
+
+      // وضع غامض: نقاط مستلمة، بعضها محفوظ، لكن البقية ضايعة بدون سبب واضح
+      out.primaryCause = 'partial_drop_unexplained';
+      out.possibleCauses.push({
+        cause: 'partial_loss',
+        confidence: 50,
+        evidence: `${received} مستلمة، ${saved} محفوظة، ${rejTotal} مرفوضة، ${writeErrors} خطأ — مجموع ${saved+rejTotal+writeErrors} لا يساوي ${received}`,
+      });
+      out.recommendations.push('شوف logs ring buffer للأسباب الخفية');
+      return out;
+    }
+
+    // ⚠️ Silent Death (مو drop) — RNBG نفسه ميت
+    if (locAge != null && locAge > 15) {
+      out.severity = 'critical';
+      out.primaryCause = 'rnbg_silent_death';
+      out.possibleCauses.push({
+        cause: 'rnbg_no_locations',
+        confidence: 90,
+        evidence: `آخر استلام موقع قبل ${locAge}د — RNBG في حالة silent death`,
+      });
+      out.recommendations.push('استخدم cycle_wakelock أو restart_rnbg من driver-diagnostics');
+      return out;
+    }
+
+    // الـ history قديم لكن ما عندنا locations جديدة كمان — مو silent drop، بس متأخر عام
+    if (histAge != null && histAge > 10 && (locAge == null || locAge > 10)) {
+      out.severity = 'degraded';
+      out.primaryCause = 'app_idle_or_offline';
+      out.possibleCauses.push({ cause: 'app_idle', confidence: 60, evidence: `آخر حفظ قبل ${histAge}د، آخر استلام قبل ${locAge}د` });
+      return out;
+    }
+
+    return out;
   }
 
   // تحليل ذكي يلخّص حالة التطبيق
@@ -289,6 +459,11 @@ class SelfDiagnostics {
     if (snap.device?.isPowerSaveMode === true) issues.push('POWER_SAVE_ON');
     if (snap.device?.battery != null && snap.device.battery < 0.15) issues.push('LOW_BATTERY');
     if (snap.rnbg?.queueCount > 100) issues.push(`QUEUE_BLOATED_${snap.rnbg.queueCount}`);
+
+    // v2.7.23: silent drop = locations يجون لكن ما تتحفظ
+    if (snap.historyDiagnosis?.severity === 'critical' && snap.historyDiagnosis.primaryCause) {
+      issues.push('HISTORY_DROP_' + snap.historyDiagnosis.primaryCause.toUpperCase());
+    }
 
     return {
       status: issues.length === 0 ? 'healthy' : (issues.length >= 3 ? 'critical' : 'degraded'),
