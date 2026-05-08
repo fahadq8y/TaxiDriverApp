@@ -524,8 +524,9 @@ class LocationService {
         // ===== ACTIVITY RECOGNITION & SMART STOP DETECTION =====
         // V3 PRO: استغلال activity recognition من Google Play Services
         // (still / on_foot / on_bicycle / in_vehicle / running)
-        // v2.7.11 (Balanced): تقليل stopTimeout من 5→3 لبداية رحلة أسرع
-        stopTimeout: 3,                       // اعتبر السائق متوقف بعد 3 دقائق من السكون (كان 5)
+        // v2.7.24 FIX (Honor Magic5 Lite): تقليل stopTimeout من 3→1 لبداية رحلة أسرع
+        // السبب: Honor Activity Recognition بطيء جداً (5-30 د)، فلازم نقلل وقت إعلان الحركة
+        stopTimeout: 1,                       // اعتبر السائق متوقف بعد دقيقة واحدة فقط (كان 3)
         stopDetectionDelay: 1,                // ابدأ تحليل التوقف بعد دقيقة واحدة من الثبات
         disableStopDetection: false,          // فعل اكتشاف التوقف الذكي
         disableMotionActivityUpdates: false,  // فعل activity recognition (driving/walking/still)
@@ -655,6 +656,9 @@ class LocationService {
 
       // v2.7.5 (الحل #8): شغل health monitoring
       this.startHealthMonitoring();
+
+      // v2.7.24: شغل Tracking Watchdog — يكتشف "يتحرك بدون نقاط" ويعيد تنشيط RNBG
+      this.startTrackingWatchdog();
 
       // v2.7.17 (إصلاح J): HONOR Wakelock + Periodic Cycle
       // يحل مشكلة "Silent Death" بعد 60 دقيقة على HONOR/Huawei
@@ -816,11 +820,17 @@ class LocationService {
       console.log(`[shouldSaveToHistory] State change: moving=${wasMoving}→${isMoving} - saving transition`);
       this.lastIsMoving = isMoving;
       this._lastRejectReason = null;
+      // v2.7.24: سجّل لحظة الانتقال — تستخدمها قاعدة "early-acceleration window"
+      this._lastTransitionTime = now;
       return true;
     }
     
-    // 🛑 السائق متوقف فعلاً
-    if (!isMoving || isStill) {
+    // 🛑 v2.7.24 FIX: السائق متوقف فعلاً
+    // ⚠️ تغيير حرج: حذفنا "|| isStill" من الشرط
+    // السبب: على Honor Magic5 Lite، Activity Recognition يصرّ على activityType='still'
+    //        بثقة 100% حتى لما السيارة تتحرك بـ 48 كم/س. الاعتماد عليه كان يقتل
+    //        كل نقاط بداية الرحلة. RNBG.is_moving أدق من Google Activity Recognition.
+    if (!isMoving) {
       // V5 (v2.7.0): backup interval قابل للتعديل من Firestore
       const stillBackup = this.config.stillBackupIntervalMs || 1800000;
       if (timeDiff >= stillBackup) {
@@ -832,17 +842,31 @@ class LocationService {
       return false;
     }
     
-    // 🚗 V5 (v2.7.0): السائق يتحرك: احفظ كل saveIntervalMs أو saveDistanceMeters
-    const saveInterval = this.config.saveIntervalMs || 30000;
-    const saveDist = this.config.saveDistanceMeters || 20;
+    // 🚗 v2.7.24 FIX: السائق يتحرك (isMoving=true) — قواعد أقل صرامة لتفادي
+    //    "moving_below_threshold" اللي كان يأكل بداية كل رحلة (128 رفض/ساعة على DRV030)
+    // القاعدة الجديدة: اقبل النقطة لو حد من الشروط تحقق:
+    //   أ) مرّ ≥ 60s (بدل saveIntervalMs الطويل)
+    //   ب) تحرك ≥ 10م (بدل 20م)
+    //   ج) أي نقطة أول 30 ثانية بعد بدء الحركة
+    const saveInterval = Math.min(this.config.saveIntervalMs || 30000, 60000);
+    const saveDist = Math.min(this.config.saveDistanceMeters || 20, 10);
+    
     if (timeDiff >= saveInterval) {
-      console.log(`[shouldSaveToHistory] Moving - ${saveInterval/1000}s elapsed`);
+      console.log(`[shouldSaveToHistory] Moving - ${(timeDiff/1000).toFixed(0)}s elapsed (>= ${saveInterval/1000}s)`);
       this._lastRejectReason = null;
       return true;
     }
     
     if (distFromLast >= saveDist) {
       console.log(`[shouldSaveToHistory] Moving - ${Math.round(distFromLast)}m (>= ${saveDist}م)`);
+      this._lastRejectReason = null;
+      return true;
+    }
+    
+    // v2.7.24: النقاط الأولى بعد بدء الحركة (≤ 30 ث من آخر transition) — اقبلها كلها
+    // لمنع فقدان "first acceleration" points على Honor
+    if (this._lastTransitionTime && (now - this._lastTransitionTime) < 30000) {
+      console.log(`[shouldSaveToHistory] Early-acceleration window — accept`);
       this._lastRejectReason = null;
       return true;
     }
@@ -1290,6 +1314,92 @@ class LocationService {
       clearInterval(this.healthInterval);
       this.healthInterval = null;
       console.log('[LocationService] 🏥 Health monitoring stopped');
+    }
+  }
+
+  // ═══════════════════════════════════════════════════════════════════
+  // v2.7.24: TRACKING WATCHDOG (الحل الجذري لمشكلة Honor)
+  // ═══════════════════════════════════════════════════════════════════
+  // المشكلة:
+  //   على Honor Magic5 Lite، Activity Recognition Provider يصرّ على activityType='still'
+  //   حتى لما السيارة تتحرك بـ 48 كم/س. RNBG يبقى في stationary mode 5-30 دقيقة بعد
+  //   بدء الحركة الفعلية → فجوة 30 دقيقة في كل بداية رحلة.
+  //
+  // الحل:
+  //   كل 90 ثانية، افحص:
+  //     - state.isMoving === true (RNBG يعرف إن السائق يتحرك)
+  //     - lastHistorySaveTime > 120 ثانية (ولا نقطة محفوظة لـ دقيقتين)
+  //   → غصب RNBG على بدء moving mode + اطلب نقطة فورية:
+  //     BackgroundGeolocation.changePace(true)
+  //     BackgroundGeolocation.getCurrentPosition({samples:3, persist:true})
+  // ═══════════════════════════════════════════════════════════════════
+  startTrackingWatchdog() {
+    try {
+      if (this.config.watchdogEnabled === false) {
+        console.log('[LocationService] 🐕 Watchdog disabled by config');
+        return;
+      }
+      if (this.watchdogInterval) clearInterval(this.watchdogInterval);
+
+      const intervalMs = (this.config.watchdogIntervalSec || 90) * 1000;
+      const stuckThresholdMs = (this.config.watchdogStuckThresholdSec || 120) * 1000;
+      console.log('[LocationService] 🐕 Watchdog started — every', intervalMs/1000, 's, threshold', stuckThresholdMs/1000, 's');
+
+      this.watchdogInterval = setInterval(async () => {
+        try {
+          const BackgroundGeolocation = require('react-native-background-geolocation').default;
+          const state = await BackgroundGeolocation.getState();
+          const now = Date.now();
+          const lastSave = this.lastHistorySaveTime || 0;
+          const sinceLastSave = now - lastSave;
+
+          // الشرط الأساسي: RNBG يعرف إنه يتحرك + ولا نقطة محفوظة منذ threshold
+          if (state.isMoving === true && lastSave > 0 && sinceLastSave >= stuckThresholdMs) {
+            const sec = Math.round(sinceLastSave / 1000);
+            console.warn(`[Watchdog] 🚨 STUCK DETECTED — isMoving=true, ${sec}s without save. Forcing pace + position.`);
+
+            // عدّاد التدخلات (يُرسل في تشخيص v2.7.23)
+            this._watchdogInterventions = (this._watchdogInterventions || 0) + 1;
+
+            // 1) غصب RNBG على moving mode
+            try {
+              await BackgroundGeolocation.changePace(true);
+              console.log('[Watchdog] ✅ changePace(true) succeeded');
+            } catch (e) {
+              console.warn('[Watchdog] ⚠️ changePace failed:', e.message);
+            }
+
+            // 2) اطلب نقطة فورية (تمر بالـ onLocation handler العادي)
+            try {
+              const loc = await BackgroundGeolocation.getCurrentPosition({
+                samples: 3,
+                persist: true,
+                timeout: 30,
+                maximumAge: 0,
+                desiredAccuracy: 10,
+                extras: { source: 'watchdog', interventionNum: this._watchdogInterventions }
+              });
+              console.log('[Watchdog] ✅ Forced fix:', loc?.coords?.latitude, loc?.coords?.longitude);
+            } catch (e) {
+              console.warn('[Watchdog] ⚠️ getCurrentPosition failed:', e.message);
+            }
+          } else if (state.isMoving === true && sinceLastSave > 60000) {
+            console.log(`[Watchdog] ⏱️ moving=true, ${Math.round(sinceLastSave/1000)}s since save (within threshold)`);
+          }
+        } catch (e) {
+          console.warn('[Watchdog] periodic check failed:', e.message);
+        }
+      }, intervalMs);
+    } catch (e) {
+      console.warn('[LocationService] startTrackingWatchdog failed:', e.message);
+    }
+  }
+
+  stopTrackingWatchdog() {
+    if (this.watchdogInterval) {
+      clearInterval(this.watchdogInterval);
+      this.watchdogInterval = null;
+      console.log('[LocationService] 🐕 Watchdog stopped');
     }
   }
 
