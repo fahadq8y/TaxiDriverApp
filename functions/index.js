@@ -60,6 +60,38 @@
     'messaging/invalid-argument',
   ]);
 
+  // Archive-deletion coordination: protected reads and writes share the global gate.
+  async function guardedDriversSnapshot(query) {
+    return db.runTransaction(async (tx) => {
+      const controlRef = db.collection('archiveDeletionControl').doc('state');
+      const controlSnap = await tx.get(controlRef);
+      if (controlSnap.exists && controlSnap.data().maintenance === true) return null;
+      return tx.get(query);
+    });
+  }
+
+  async function guardedDriverUpdate(driverId, update) {
+    const driverRef = db.collection('drivers').doc(driverId);
+    return db.runTransaction(async (tx) => {
+      const driverSnap = await tx.get(driverRef);
+      if (!driverSnap.exists) return false;
+      const driver = driverSnap.data();
+      const identifiers = [...new Set([
+        driverId,
+        typeof driver.employeeNumber === 'string' && driver.employeeNumber
+          ? driver.employeeNumber
+          : null,
+      ].filter(Boolean))];
+      const controlRef = db.collection('archiveDeletionControl').doc('state');
+      const lockRefs = identifiers.map(identifier =>
+        db.collection('archiveDeletionLocks').doc(identifier));
+      const [controlSnap, ...lockSnaps] = await tx.getAll(controlRef, ...lockRefs);
+      if ((controlSnap.exists && controlSnap.data().maintenance === true) ||
+          lockSnaps.some(lockSnap => lockSnap.exists)) return false;
+      return update(tx, driverRef, driver);
+    });
+  }
+
   /**
    * مراقبة السائقين كل دقيقة
    */
@@ -82,9 +114,12 @@
         const abandonedThreshold = now - (fcmCfg.abandonedThresholdHours * 60 * 60 * 1000);
         const pingThrottleThreshold = now - (fcmCfg.intervalMin * 60 * 1000);
 
-        const driversSnapshot = await db.collection('drivers')
-          .where('isActive', '==', true)
-          .get();
+        const driversQuery = db.collection('drivers').where('isActive', '==', true);
+        const driversSnapshot = await guardedDriversSnapshot(driversQuery);
+        if (!driversSnapshot) {
+          console.log('Archive maintenance active — skipping driver monitoring');
+          return null;
+        }
 
         if (driversSnapshot.empty) {
           console.log('ℹ️ No active drivers found');
@@ -146,12 +181,8 @@
         // - stale: نحجز ونرسل دائماً (ما يهم الـ throttle، السائق متوقف)
         // - aggressive: نرفض إذا lastFcmPingAt حديث (نافذة pingThrottleThreshold)
         async function reserveSlot(driverId, reason) {
-          const ref = db.collection('drivers').doc(driverId);
           try {
-            return await db.runTransaction(async (tx) => {
-              const snap = await tx.get(ref);
-              if (!snap.exists) return false;
-              const data = snap.data();
+            return await guardedDriverUpdate(driverId, (tx, ref, data) => {
               const lastPing = data.lastFcmPingAt?.toMillis() || 0;
 
               // aggressive: تأكد ما حد ثاني سبقنا
@@ -294,13 +325,17 @@
       let tokenInvalidated = false;
       if (error.code && INVALID_TOKEN_ERRORS.has(error.code)) {
         try {
-          await db.collection('drivers').doc(driverId).update({
-            fcmToken: admin.firestore.FieldValue.delete(),
-            fcmTokenInvalidatedAt: admin.firestore.FieldValue.serverTimestamp(),
-            fcmTokenInvalidatedReason: error.code,
+          tokenInvalidated = await guardedDriverUpdate(driverId, (tx, ref) => {
+            tx.update(ref, {
+              fcmToken: admin.firestore.FieldValue.delete(),
+              fcmTokenInvalidatedAt: admin.firestore.FieldValue.serverTimestamp(),
+              fcmTokenInvalidatedReason: error.code,
+            });
+            return true;
           });
-          tokenInvalidated = true;
-          console.log(`🗑️ Deleted invalid FCM token for ${driverId} (${error.code})`);
+          if (tokenInvalidated) {
+            console.log(`🗑️ Deleted invalid FCM token for ${driverId} (${error.code})`);
+          }
         } catch (deleteErr) {
           console.error(`❌ Failed to delete invalid token:`, deleteErr);
         }
@@ -390,9 +425,12 @@
         const now = Date.now();
         const oneDayAgo = now - (24 * 60 * 60 * 1000);
 
-        const activeDriversSnapshot = await db.collection('drivers')
-          .where('isActive', '==', true)
-          .get();
+        const activeDriversQuery = db.collection('drivers').where('isActive', '==', true);
+        const activeDriversSnapshot = await guardedDriversSnapshot(activeDriversQuery);
+        if (!activeDriversSnapshot) {
+          console.log('Archive maintenance active — skipping daily statistics');
+          return null;
+        }
 
         const alertsSnapshot = await db.collection('alerts')
           .where('timestamp', '>', new Date(oneDayAgo))
